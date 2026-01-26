@@ -1,0 +1,335 @@
+
+'============================================================
+' BASE SAMPLE CALCULATOR - WORKSHEET VERSION
+' ============================================================
+'
+' SETUP INSTRUCTIONS:
+' 1. Open Excel
+' 2. Press ALT + F11 to open VBA Editor
+' 3. Click Insert > Module
+' 4. Paste ALL this code into the module
+' 5. Close VBA Editor (ALT + Q)
+' 6. Run the macro "SetupCalculator" ONCE to create the interface
+' 7. After setup, just enter values in the yellow cells and the result appears automatically!
+'
+' ============================================================
+
+
+' Run this macro ONCE to set up the calculator interface
+Sub SetupCalculator()
+    Dim ws As Worksheet
+    Application.EnableEvents = True
+    ' Clear existing content and create new sheet
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    Sheets("Base Sample Calculator").Delete
+    Application.DisplayAlerts = True
+    On Error GoTo 0
+    
+    Set ws = Sheets.Add
+    ws.Name = "Base Sample Calculator"
+    
+    ' Set up the interface
+    With ws
+        ' Title
+        .Range("B2").Value = "BASE SAMPLE CALCULATOR"
+        .Range("B2").Font.Size = 18
+        .Range("B2").Font.Bold = True
+        .Range("B2").Font.Color = RGB(102, 126, 234)
+        
+        ' Input section
+        .Range("B4").Value = "Enter the Actual Population:"
+        .Range("C4").Interior.Color = RGB(255, 255, 200) ' Yellow
+        .Range("C4").Borders.LineStyle = xlContinuous
+        
+        .Range("B6").Value = "Enter the Risk Level:"
+        .Range("C6").Interior.Color = RGB(255, 255, 200) ' Yellow
+        .Range("C6").Borders.LineStyle = xlContinuous
+        .Range("C6").Validation.Delete
+        .Range("C6").Validation.Add Type:=xlValidateList, Formula1:="Low,Medium,High"
+        
+        .Range("B8").Value = "Enter the Frequency of Base Sample:"
+        .Range("C8").Interior.Color = RGB(255, 255, 200) ' Yellow
+        .Range("C8").Borders.LineStyle = xlContinuous
+        .Range("C8").Validation.Delete
+        .Range("C8").Validation.Add Type:=xlValidateList, Formula1:="N/A,Multiple per day,Daily,Weekly,Bi-Weekly,Monthly,Quarterly,Annually"
+        
+        ' Result section
+        .Range("B10").Value = "Base Sample Size:"
+        .Range("B10").Font.Bold = True
+        .Range("C10").Font.Size = 24
+        .Range("C10").Font.Bold = True
+        .Range("C10").Font.Color = RGB(245, 87, 108)
+        .Range("C10").HorizontalAlignment = xlCenter
+        .Range("C10").Interior.Color = RGB(248, 249, 250)
+        .Range("C10").Borders.LineStyle = xlContinuous
+          
+        ' Error message section
+        .Range("B12:D12").Merge
+        .Range("B12").Font.Color = RGB(255, 0, 0)
+        .Range("B12").Font.Italic = True
+        .Range("B12").WrapText = True
+        
+        ' Instructions
+        .Range("B14").Value = "INSTRUCTIONS:"
+        .Range("B14").Font.Bold = True
+        .Range("B15").Value = "1. Enter population in yellow cell"
+        .Range("B16").Value = "2. Select risk level from dropdown"
+        .Range("B17").Value = "3. Select frequency from dropdown"
+        .Range("B18").Value = "4. Result appears automatically!"
+        
+        ' Column widths
+        .Columns("B:B").ColumnWidth = 30
+        .Columns("C:C").ColumnWidth = 25
+        .Columns("D:D").ColumnWidth = 20
+        
+        ' Add worksheet change event
+        .Range("C4:C8").Name = "InputRange"
+    End With
+    
+    MsgBox "Calculator setup complete!" & vbCrLf & vbCrLf & _
+           "Enter values in the YELLOW cells:" & vbCrLf & _
+           "- Population (C4)" & vbCrLf & _
+           "- Risk Level (C6) - Use dropdown" & vbCrLf & _
+           "- Frequency (C8) - Use dropdown" & vbCrLf & vbCrLf & _
+           "Result will appear automatically in C10!", vbInformation, "Setup Complete"
+End Sub
+
+
+
+' Main calculation function
+Sub CalculateResult()
+    ' Ensure events are enabled
+    Application.EnableEvents = True
+    
+    Dim ws As Worksheet
+    Dim population As Long
+    Dim riskLevel As String
+    Dim frequency As String
+    Dim sampleSize As Variant
+    Dim errorMsg As String
+    
+    On Error Resume Next
+    Set ws = ActiveSheet
+    
+    ' Clear previous results
+  
+    ws.Range("B12").Value = ""
+    
+    ' Get input values
+    On Error Resume Next
+    population = CLng(ws.Range("C4").Value)
+    On Error GoTo 0
+    
+    riskLevel = Trim(ws.Range("C6").Value)
+    frequency = Trim(ws.Range("C8").Value)
+    
+    ' Validate inputs
+    If population < 1 Then
+        ws.Range("B12").Value = "Please enter a valid population (minimum 1)"
+        Exit Sub
+    End If
+    
+    If riskLevel = "" Then
+        ws.Range("B12").Value = "Please select a risk level"
+        Exit Sub
+    End If
+    
+    If frequency = "" Then
+        ws.Range("B12").Value = "Please select a frequency"
+        Exit Sub
+    End If
+    
+    ' Calculate sample size
+    sampleSize = CalculateSampleSize(population, riskLevel, frequency, errorMsg)
+    ws.Range("D10").Font.Color = RGB(255, 255, 255) ' White font
+    
+    If errorMsg <> "" Then
+        ws.Range("B12").Value = errorMsg
+        ws.Range("D10").Value = " "
+    Else
+        ws.Range("D10").Value = sampleSize
+    End If
+    
+    ' Save current values in D4, D6, D8 with white font (hidden)
+    ws.Range("D4").Value = ws.Range("C4").Value
+    ws.Range("D4").Font.Color = RGB(255, 255, 255) ' White font
+    
+    ws.Range("D6").Value = ws.Range("C6").Value
+    ws.Range("D6").Font.Color = RGB(255, 255, 255) ' White font
+    
+    ws.Range("D8").Value = ws.Range("C8").Value
+    ws.Range("D8").Font.Color = RGB(255, 255, 255) ' White font
+End Sub
+
+Function CalculateSampleSize(population As Long, riskLevel As String, frequency As String, ByRef errorMsg As String) As Variant
+Application.EnableEvents = True
+    Dim expectedPopValues As Variant
+    Dim sampleSize As Long
+    
+    expectedPopValues = Array(250, 52, 24, 12, 4, 1)
+    errorMsg = ""
+    
+    ' Handle N/A frequency
+    If frequency = "N/A" Then
+        ' Check if population matches expected pop values
+        Dim i As Integer
+        For i = LBound(expectedPopValues) To UBound(expectedPopValues)
+            If population = expectedPopValues(i) Then
+                errorMsg = "Error: Population " & population & " matches a standard expected population value. Please select a specific frequency instead of N/A."
+                CalculateSampleSize = ""
+                Exit Function
+            End If
+        Next i
+        
+        ' If population > 250, use direct values
+        If population > 250 Then
+            Select Case riskLevel
+                Case "Low": sampleSize = 30
+                Case "Medium": sampleSize = 45
+                Case "High": sampleSize = 60
+            End Select
+        Else
+            ' Use interpolation for population <= 250
+            sampleSize = InterpolateSampleSize(population, riskLevel)
+        End If
+    Else
+        ' Handle specific frequency
+        Dim expectedPop As Long
+        expectedPop = GetExpectedPop(frequency)
+        
+        If population <> expectedPop Then
+            errorMsg = "Error: Population " & population & " is not valid for frequency '" & frequency & "'. Expected population: " & expectedPop
+            CalculateSampleSize = ""
+            Exit Function
+        End If
+        
+        ' Get sample size from lookup table
+        sampleSize = GetSampleSizeFromTable(frequency, riskLevel)
+    End If
+    
+    CalculateSampleSize = sampleSize
+End Function
+
+Function GetExpectedPop(frequency As String) As Long
+Application.EnableEvents = True
+    Select Case frequency
+        Case "Multiple per day": GetExpectedPop = 250
+        Case "Daily": GetExpectedPop = 250
+        Case "Weekly": GetExpectedPop = 52
+        Case "Bi-Weekly": GetExpectedPop = 24
+        Case "Monthly": GetExpectedPop = 12
+        Case "Quarterly": GetExpectedPop = 4
+        Case "Annually": GetExpectedPop = 1
+        Case Else: GetExpectedPop = 0
+    End Select
+End Function
+
+Function GetSampleSizeFromTable(frequency As String, riskLevel As String) As Long
+Application.EnableEvents = True
+    Dim sampleSize As Long
+    
+    Select Case frequency
+        Case "Multiple per day"
+            Select Case riskLevel
+                Case "Low": sampleSize = 30
+                Case "Medium": sampleSize = 45
+                Case "High": sampleSize = 60
+            End Select
+        Case "Daily"
+            Select Case riskLevel
+                Case "Low": sampleSize = 20
+                Case "Medium": sampleSize = 25
+                Case "High": sampleSize = 30
+            End Select
+        Case "Weekly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 5
+                Case "Medium": sampleSize = 8
+                Case "High": sampleSize = 10
+            End Select
+        Case "Bi-Weekly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 3
+                Case "Medium": sampleSize = 6
+                Case "High": sampleSize = 8
+            End Select
+        Case "Monthly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 2
+                Case "Medium": sampleSize = 3
+                Case "High": sampleSize = 5
+            End Select
+        Case "Quarterly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 1
+                Case "Medium": sampleSize = 2
+                Case "High": sampleSize = 2
+            End Select
+        Case "Annually"
+            Select Case riskLevel
+                Case "Low": sampleSize = 1
+                Case "Medium": sampleSize = 1
+                Case "High": sampleSize = 1
+            End Select
+    End Select
+    
+    GetSampleSizeFromTable = sampleSize
+End Function
+
+Function InterpolateSampleSize(population As Long, riskLevel As String) As Long
+Application.EnableEvents = True
+    Dim table As Variant
+    Dim i As Integer
+    Dim x1 As Long, y1 As Long
+    Dim x2 As Long, y2 As Long
+    Dim result As Double
+    
+    ' Define interpolation table based on risk level
+    Select Case riskLevel
+        Case "Low"
+            table = Array(Array(250, 20), Array(52, 5), Array(24, 3), Array(12, 2), Array(4, 1), Array(1, 1))
+        Case "Medium"
+            table = Array(Array(250, 25), Array(52, 8), Array(24, 6), Array(12, 3), Array(4, 2), Array(1, 1))
+        Case "High"
+            table = Array(Array(250, 30), Array(52, 10), Array(24, 8), Array(12, 5), Array(4, 2), Array(1, 1))
+    End Select
+    
+    ' Check for exact match
+    For i = LBound(table) To UBound(table)
+        If population = table(i)(0) Then
+            InterpolateSampleSize = table(i)(1)
+            Exit Function
+        End If
+    Next i
+    
+    ' Find the two points to interpolate between
+    For i = LBound(table) To UBound(table) - 1
+        x1 = table(i)(0)      ' Larger population
+        y1 = table(i)(1)      ' Sample size for larger pop
+        x2 = table(i + 1)(0)  ' Smaller population
+        y2 = table(i + 1)(1)  ' Sample size for smaller pop
+        
+        ' Check if population falls between these two points
+        If population < x1 And population > x2 Then
+            ' Linear interpolation
+            result = y1 + ((population - x1) * (y2 - y1)) / (x2 - x1)
+            ' Round UP for conservative approach
+            InterpolateSampleSize = Application.WorksheetFunction.RoundUp(result, 0)
+            Exit Function
+        End If
+    Next i
+    
+    ' If population is larger than largest in table
+    If population > table(LBound(table))(0) Then
+        InterpolateSampleSize = table(LBound(table))(1)
+        Exit Function
+    End If
+    
+    ' If population is smaller than smallest in table
+    If population < table(UBound(table))(0) Then
+        InterpolateSampleSize = table(UBound(table))(1)
+        Exit Function
+    End If
+End Function
+
