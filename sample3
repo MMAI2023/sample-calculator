@@ -1,0 +1,550 @@
+/**
+ * ============================================================
+ * AUDIT SAMPLING CALCULATOR - Power Automate Integration
+ * Designed to work with Copilot Agent + Power Automate Flow
+ * 
+ * This script:
+ * 1. Accepts input parameters from Power Automate
+ * 2. Calculates sample sizes based on audit sampling methodology
+ * 3. Returns structured results back to Power Automate
+ * 4. Generates human-readable output for the Copilot agent
+ * ============================================================
+ */
+
+/**
+ * Main function called by Power Automate
+ * @param workbook - Excel workbook object
+ * @param population - Total population size (e.g., 250, 100, 52)
+ * @param riskLevel - Risk assessment level: "Low", "Medium", or "High"
+ * @param frequency - How often the process occurs: "As Needed", "Daily", "Weekly", etc.
+ * @param calculateSubSample - Optional: Set to true to also calculate sub-sample
+ * @param subPopulation - Optional: Sub-population size for Part 2 calculation
+ * @returns Object with calculation results and formatted response text
+ */
+function main(
+  workbook: ExcelScript.Workbook,
+  population: number,
+  riskLevel: string = "Medium",
+  frequency: string = "As Needed",
+  calculateSubSample: boolean = false,
+  subPopulation: number = 0
+): CalculationResult {
+  
+  // Validate inputs
+  const validation = validateInputs(population, riskLevel, frequency, calculateSubSample, subPopulation);
+  if (!validation.isValid) {
+    return {
+      success: false,
+      error: validation.errorMessage,
+      baseSampleSize: 0,
+      subSampleSize: 0,
+      responseText: `❌ ${validation.errorMessage}`,
+      calculationDetails: ""
+    };
+  }
+  
+  // Calculate Part 1: Base Sample Size
+  const part1Result = calculateSampleSize(population, riskLevel, frequency);
+  
+  if (part1Result.error) {
+    return {
+      success: false,
+      error: part1Result.error,
+      baseSampleSize: 0,
+      subSampleSize: 0,
+      responseText: `❌ ${part1Result.error}`,
+      calculationDetails: ""
+    };
+  }
+  
+  // Calculate Part 2: Sub-Sample Size (if requested)
+  let part2Result = { sampleSize: 0, error: "" };
+  if (calculateSubSample && subPopulation > 0) {
+    part2Result = calculateSampleSize(subPopulation, riskLevel, "As Needed");
+  }
+  
+  // Generate formatted response text for Copilot
+  const responseText = generateResponseText(
+    population,
+    riskLevel,
+    frequency,
+    part1Result.sampleSize!,
+    calculateSubSample,
+    subPopulation,
+    part2Result.sampleSize
+  );
+  
+  // Generate detailed calculation explanation
+  const calculationDetails = generateCalculationDetails(
+    population,
+    riskLevel,
+    frequency,
+    part1Result.sampleSize!,
+    calculateSubSample,
+    subPopulation,
+    part2Result.sampleSize
+  );
+  
+  // Log results to Excel sheet (optional - for audit trail)
+  logCalculationToSheet(workbook, population, riskLevel, frequency, part1Result.sampleSize!, subPopulation, part2Result.sampleSize);
+  
+  // Return structured result
+  return {
+    success: true,
+    error: "",
+    baseSampleSize: part1Result.sampleSize!,
+    subSampleSize: part2Result.sampleSize || 0,
+    responseText: responseText,
+    calculationDetails: calculationDetails,
+    inputs: {
+      population: population,
+      riskLevel: riskLevel,
+      frequency: frequency,
+      subPopulation: subPopulation
+    }
+  };
+}
+
+/**
+ * Result interface for Power Automate
+ */
+interface CalculationResult {
+  success: boolean;
+  error: string;
+  baseSampleSize: number;
+  subSampleSize: number;
+  responseText: string;
+  calculationDetails: string;
+  inputs?: {
+    population: number;
+    riskLevel: string;
+    frequency: string;
+    subPopulation: number;
+  };
+}
+
+/**
+ * Validate all inputs before calculation
+ */
+function validateInputs(
+  population: number,
+  riskLevel: string,
+  frequency: string,
+  calculateSubSample: boolean,
+  subPopulation: number
+): { isValid: boolean; errorMessage: string } {
+  
+  // Validate population
+  if (!population || population < 1) {
+    return { isValid: false, errorMessage: "Population must be a positive number greater than 0." };
+  }
+  
+  // Validate risk level
+  const validRiskLevels = ["Low", "Medium", "High"];
+  if (!validRiskLevels.includes(riskLevel)) {
+    return { isValid: false, errorMessage: `Risk level must be one of: ${validRiskLevels.join(", ")}. You provided: "${riskLevel}"` };
+  }
+  
+  // Validate frequency
+  const validFrequencies = ["As Needed", "Multiple per day", "Daily", "Weekly", "Bi-Weekly", "Monthly", "Quarterly", "Annually"];
+  if (!validFrequencies.includes(frequency)) {
+    return { isValid: false, errorMessage: `Frequency must be one of: ${validFrequencies.join(", ")}. You provided: "${frequency}"` };
+  }
+  
+  // Validate sub-population if sub-sample calculation is requested
+  if (calculateSubSample) {
+    if (!subPopulation || subPopulation < 1) {
+      return { isValid: false, errorMessage: "Sub-population must be a positive number when calculating sub-samples." };
+    }
+  }
+  
+  return { isValid: true, errorMessage: "" };
+}
+
+/**
+ * Main calculation function - calculates sample size based on population, risk, and frequency
+ */
+function calculateSampleSize(
+  population: number,
+  riskLevel: string,
+  frequency: string
+): { sampleSize: number | null; error: string } {
+  
+  const expectedPopValues = [250, 52, 24, 12, 4, 1];
+  let sampleSize: number | null = null;
+  let errorMsg = "";
+  
+  if (frequency === "As Needed") {
+    // Check if population matches a standard value
+    for (const expectedVal of expectedPopValues) {
+      if (population === expectedVal) {
+        errorMsg = `Population ${population} matches a standard frequency value. Please specify the actual frequency (Daily, Weekly, Monthly, etc.) instead of "As Needed".`;
+        return { sampleSize: null, error: errorMsg };
+      }
+    }
+    
+    // For populations > 250, use fixed sample sizes
+    if (population > 250) {
+      switch (riskLevel) {
+        case "Low": sampleSize = 30; break;
+        case "Medium": sampleSize = 45; break;
+        case "High": sampleSize = 60; break;
+        default: sampleSize = 45;
+      }
+    } else {
+      // For populations <= 250, interpolate
+      sampleSize = interpolateSampleSize(population, riskLevel);
+    }
+  } else {
+    // Frequency-based calculation
+    const expectedPop = getExpectedPop(frequency);
+    
+    if (frequency === "Multiple per day") {
+      if (population <= 250) {
+        errorMsg = `"Multiple per day" frequency requires a population greater than 250. Your population is ${population}.`;
+        return { sampleSize: null, error: errorMsg };
+      }
+    } else {
+      if (population !== expectedPop) {
+        errorMsg = `For "${frequency}" frequency, the expected population is ${expectedPop}, but you provided ${population}. Please adjust the population or choose "As Needed" for custom populations.`;
+        return { sampleSize: null, error: errorMsg };
+      }
+    }
+    
+    sampleSize = getSampleSizeFromTable(frequency, riskLevel);
+  }
+  
+  return { sampleSize, error: "" };
+}
+
+/**
+ * Get expected population based on frequency
+ */
+function getExpectedPop(frequency: string): number {
+  switch (frequency) {
+    case "Multiple per day": return 251;
+    case "Daily": return 250;
+    case "Weekly": return 52;
+    case "Bi-Weekly": return 24;
+    case "Monthly": return 12;
+    case "Quarterly": return 4;
+    case "Annually": return 1;
+    default: return 0;
+  }
+}
+
+/**
+ * Get sample size from lookup table based on frequency and risk level
+ */
+function getSampleSizeFromTable(frequency: string, riskLevel: string): number {
+  let sampleSize = 0;
+  
+  switch (frequency) {
+    case "Multiple per day":
+      switch (riskLevel) {
+        case "Low": sampleSize = 30; break;
+        case "Medium": sampleSize = 45; break;
+        case "High": sampleSize = 60; break;
+        default: sampleSize = 45;
+      }
+      break;
+    case "Daily":
+      switch (riskLevel) {
+        case "Low": sampleSize = 20; break;
+        case "Medium": sampleSize = 25; break;
+        case "High": sampleSize = 30; break;
+        default: sampleSize = 25;
+      }
+      break;
+    case "Weekly":
+      switch (riskLevel) {
+        case "Low": sampleSize = 5; break;
+        case "Medium": sampleSize = 8; break;
+        case "High": sampleSize = 10; break;
+        default: sampleSize = 8;
+      }
+      break;
+    case "Bi-Weekly":
+      switch (riskLevel) {
+        case "Low": sampleSize = 3; break;
+        case "Medium": sampleSize = 6; break;
+        case "High": sampleSize = 8; break;
+        default: sampleSize = 6;
+      }
+      break;
+    case "Monthly":
+      switch (riskLevel) {
+        case "Low": sampleSize = 2; break;
+        case "Medium": sampleSize = 3; break;
+        case "High": sampleSize = 5; break;
+        default: sampleSize = 3;
+      }
+      break;
+    case "Quarterly":
+      switch (riskLevel) {
+        case "Low": sampleSize = 2; break;
+        case "Medium": sampleSize = 2; break;
+        case "High": sampleSize = 2; break;
+        default: sampleSize = 2;
+      }
+      break;
+    case "Annually":
+      sampleSize = 1;
+      break;
+  }
+  
+  return sampleSize;
+}
+
+/**
+ * Interpolate sample size for populations between standard values
+ */
+function interpolateSampleSize(population: number, riskLevel: string): number {
+  let table: number[][];
+  
+  switch (riskLevel) {
+    case "Low":
+      table = [[250, 20], [52, 5], [24, 3], [12, 2], [4, 2], [1, 1]];
+      break;
+    case "Medium":
+      table = [[250, 25], [52, 8], [24, 6], [12, 3], [4, 2], [1, 1]];
+      break;
+    case "High":
+      table = [[250, 30], [52, 10], [24, 8], [12, 5], [4, 2], [1, 1]];
+      break;
+    default:
+      table = [[250, 25], [52, 8], [24, 6], [12, 3], [4, 2], [1, 1]];
+  }
+  
+  // Check for exact match
+  for (const row of table) {
+    if (population === row[0]) {
+      return row[1];
+    }
+  }
+  
+  // Interpolate between values
+  for (let i = 0; i < table.length - 1; i++) {
+    const x1 = table[i][0];
+    const y1 = table[i][1];
+    const x2 = table[i + 1][0];
+    const y2 = table[i + 1][1];
+    
+    if (population < x1 && population > x2) {
+      const result = y1 + ((population - x1) * (y2 - y1)) / (x2 - x1);
+      return Math.ceil(result);
+    }
+  }
+  
+  // Handle edge cases
+  if (population > table[0][0]) {
+    return table[0][1];
+  } else if (population < table[table.length - 1][0]) {
+    return table[table.length - 1][1];
+  }
+  
+  return table[0][1];
+}
+
+/**
+ * Generate formatted response text for Copilot agent
+ */
+function generateResponseText(
+  population: number,
+  riskLevel: string,
+  frequency: string,
+  baseSampleSize: number,
+  includeSubSample: boolean,
+  subPopulation: number,
+  subSampleSize: number
+): string {
+  
+  let response = `📊 **Audit Sampling Calculation Complete**\n\n`;
+  
+  response += `**Base Sample Analysis:**\n`;
+  response += `• Population: ${population.toLocaleString()}\n`;
+  response += `• Risk Level: ${riskLevel}\n`;
+  response += `• Frequency: ${frequency}\n`;
+  response += `• **Required Sample Size: ${baseSampleSize}**\n\n`;
+  
+  if (includeSubSample && subSampleSize > 0) {
+    response += `**Sub-Sample Analysis:**\n`;
+    response += `• Sub-Population: ${subPopulation.toLocaleString()}\n`;
+    response += `• Risk Level: ${riskLevel} (inherited from base)\n`;
+    response += `• **Required Sub-Sample Size: ${subSampleSize}**\n\n`;
+  }
+  
+  response += `**Recommendation:**\n`;
+  response += `You should select ${baseSampleSize} samples from the population of ${population.toLocaleString()}`;
+  
+  if (includeSubSample && subSampleSize > 0) {
+    response += `, and then select ${subSampleSize} sub-samples from the ${subPopulation.toLocaleString()} items within your base sample`;
+  }
+  
+  response += ` for ${riskLevel.toLowerCase()} risk audit testing.`;
+  
+  return response;
+}
+
+/**
+ * Generate detailed calculation explanation
+ */
+function generateCalculationDetails(
+  population: number,
+  riskLevel: string,
+  frequency: string,
+  baseSampleSize: number,
+  includeSubSample: boolean,
+  subPopulation: number,
+  subSampleSize: number
+): string {
+  
+  let details = `CALCULATION METHODOLOGY:\n\n`;
+  
+  details += `Base Sample Calculation:\n`;
+  details += `- Method: `;
+  
+  if (frequency === "As Needed") {
+    if (population > 250) {
+      details += `Fixed sample size for populations > 250\n`;
+    } else {
+      details += `Linear interpolation between standard population values\n`;
+    }
+  } else {
+    details += `Standard table lookup for ${frequency} frequency\n`;
+  }
+  
+  details += `- Risk Factor: ${riskLevel} risk requires `;
+  
+  switch (riskLevel) {
+    case "Low":
+      details += `conservative sampling\n`;
+      break;
+    case "Medium":
+      details += `moderate sampling\n`;
+      break;
+    case "High":
+      details += `extensive sampling\n`;
+      break;
+  }
+  
+  details += `- Result: ${baseSampleSize} samples from ${population.toLocaleString()} total population\n`;
+  
+  if (includeSubSample && subSampleSize > 0) {
+    details += `\nSub-Sample Calculation:\n`;
+    details += `- Method: Linear interpolation (As Needed frequency)\n`;
+    details += `- Risk Factor: ${riskLevel} (inherited from base sample)\n`;
+    details += `- Result: ${subSampleSize} sub-samples from ${subPopulation.toLocaleString()} items\n`;
+  }
+  
+  return details;
+}
+
+/**
+ * Log calculation to Excel sheet for audit trail
+ */
+function logCalculationToSheet(
+  workbook: ExcelScript.Workbook,
+  population: number,
+  riskLevel: string,
+  frequency: string,
+  baseSampleSize: number,
+  subPopulation: number,
+  subSampleSize: number
+): void {
+  
+  // Get or create log sheet
+  let logSheet = workbook.getWorksheet("Calculation Log");
+  if (!logSheet) {
+    logSheet = workbook.addWorksheet("Calculation Log");
+    
+    // Add headers
+    const headers = ["Timestamp", "Population", "Risk Level", "Frequency", "Base Sample Size", "Sub-Population", "Sub-Sample Size"];
+    logSheet.getRange("A1:G1").setValues([headers]);
+    logSheet.getRange("A1:G1").getFormat().getFont().setBold(true);
+    logSheet.getRange("A1:G1").getFormat().getFill().setColor("#4472C4");
+    logSheet.getRange("A1:G1").getFormat().getFont().setColor("#FFFFFF");
+  }
+  
+  // Find next empty row
+  const usedRange = logSheet.getUsedRange();
+  const lastRow = usedRange ? usedRange.getRowCount() : 1;
+  const nextRow = lastRow + 1;
+  
+  // Add log entry
+  const timestamp = new Date().toLocaleString();
+  const logData = [
+    timestamp,
+    population,
+    riskLevel,
+    frequency,
+    baseSampleSize,
+    subPopulation || "",
+    subSampleSize || ""
+  ];
+  
+  logSheet.getRange(`A${nextRow}:G${nextRow}`).setValues([logData]);
+}
+
+/**
+ * Helper function to parse natural language input from Copilot
+ * This can be called separately if you need to extract parameters from text
+ */
+function parseNaturalLanguageInput(userInput: string): {
+  population: number | null;
+  riskLevel: string;
+  frequency: string;
+  subPopulation: number | null;
+} {
+  
+  const input = userInput.toLowerCase();
+  
+  // Extract population
+  let population: number | null = null;
+  const popMatch = input.match(/population[:\s]+(\d+)/i);
+  if (popMatch) {
+    population = parseInt(popMatch[1]);
+  }
+  
+  // Extract risk level
+  let riskLevel = "Medium"; // default
+  if (input.includes("low risk") || input.includes("risk: low")) {
+    riskLevel = "Low";
+  } else if (input.includes("high risk") || input.includes("risk: high")) {
+    riskLevel = "High";
+  } else if (input.includes("medium risk") || input.includes("risk: medium")) {
+    riskLevel = "Medium";
+  }
+  
+  // Extract frequency
+  let frequency = "As Needed"; // default
+  if (input.includes("daily")) {
+    frequency = "Daily";
+  } else if (input.includes("weekly")) {
+    frequency = "Weekly";
+  } else if (input.includes("bi-weekly") || input.includes("biweekly")) {
+    frequency = "Bi-Weekly";
+  } else if (input.includes("monthly")) {
+    frequency = "Monthly";
+  } else if (input.includes("quarterly")) {
+    frequency = "Quarterly";
+  } else if (input.includes("annually") || input.includes("yearly")) {
+    frequency = "Annually";
+  } else if (input.includes("multiple per day") || input.includes("multiple times")) {
+    frequency = "Multiple per day";
+  }
+  
+  // Extract sub-population
+  let subPopulation: number | null = null;
+  const subPopMatch = input.match(/sub[-\s]population[:\s]+(\d+)/i);
+  if (subPopMatch) {
+    subPopulation = parseInt(subPopMatch[1]);
+  }
+  
+  return {
+    population,
+    riskLevel,
+    frequency,
+    subPopulation
+  };
+}
