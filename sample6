@@ -1,0 +1,116 @@
+' ============================================================
+' WORKSHEET EVENT CODE - AUTO-CLEAR RESULTS
+' ============================================================
+' 
+' IMPORTANT: This code MUST be placed in the WORKSHEET module,
+' NOT in a standard module!
+' 
+' INSTALLATION INSTRUCTIONS:
+' 
+' 1. Open your Excel file with the Audit Sampling Calculator
+' 
+' 2. Right-click on the sheet tab "Base Sample Calculator" 
+'    (at the bottom of the screen)
+' 
+' 3. Select "View Code" from the menu
+'    - This opens the VBA editor with the WORKSHEET module
+' 
+' 4. Copy ALL the code below (starting from Private Sub...)
+' 
+' 5. Paste it into the worksheet code window
+' 
+' 6. Close the VBA editor (click X or Alt+Q)
+' 
+' 7. Test it:
+'    - Type a new value in C5 → C9 should clear automatically
+'    - Type a new value in C16 → C19 should clear automatically
+' 
+' ============================================================
+
+Private Sub Worksheet_Change(ByVal Target As Range)
+    ' This event fires automatically whenever any cell value changes on this worksheet
+    
+    On Error Resume Next
+    Application.EnableEvents = False  ' Prevent infinite loops
+    
+    ' ===== PART 1: Clear results when inputs change =====
+    
+    ' If C5 (Population) changes → Clear C9 (result) and B10 (message)
+    If Not Intersect(Target, Me.Range("C5")) Is Nothing Then
+        Me.Range("C9").ClearContents
+        Me.Range("B10").ClearContents
+    End If
+    
+    ' If C6 (Risk Level) changes → Clear BOTH Part 1 and Part 2 results
+    ' (because Part 2 uses Risk Level from Part 1)
+    If Not Intersect(Target, Me.Range("C6")) Is Nothing Then
+        Me.Range("C9").ClearContents
+        Me.Range("B10").ClearContents
+        Me.Range("C19").ClearContents
+        Me.Range("B20").ClearContents
+    End If
+    
+    ' If C7 (Frequency) changes → Clear C9 and B10
+    If Not Intersect(Target, Me.Range("C7")) Is Nothing Then
+        Me.Range("C9").ClearContents
+        Me.Range("B10").ClearContents
+    End If
+    
+    ' ===== PART 2: Clear results when inputs change =====
+    
+    ' If C16 (Sub-Population) changes → Clear C19 (result) and B20 (message)
+    If Not Intersect(Target, Me.Range("C16")) Is Nothing Then
+        Me.Range("C19").ClearContents
+        Me.Range("B20").ClearContents
+    End If
+    
+    ' If C17 (Frequency for Part 2) changes → Clear C19 and B20
+    If Not Intersect(Target, Me.Range("C17")) Is Nothing Then
+        Me.Range("C19").ClearContents
+        Me.Range("B20").ClearContents
+    End If
+    
+    Application.EnableEvents = True  ' Re-enable events
+    On Error GoTo 0
+End Sub
+
+' ============================================================
+' WHAT THIS DOES:
+' ============================================================
+' 
+' When user types in C5 (Population):
+'   ✓ C9 clears (no more sample size showing)
+'   ✓ B10 clears (no more message)
+'   ✓ User must click "Calculate" button again
+' 
+' When user changes C6 (Risk Level):
+'   ✓ C9 clears (Part 1 result)
+'   ✓ C19 clears (Part 2 result - because it depends on risk level)
+'   ✓ Both messages clear
+' 
+' When user types in C16 (Sub-Population):
+'   ✓ C19 clears (no more sub-sample size)
+'   ✓ B20 clears (no more message)
+' 
+' This prevents users from seeing OUTDATED results!
+' ============================================================
+
+' ============================================================
+' TROUBLESHOOTING:
+' ============================================================
+' 
+' Problem: Code doesn't work / results don't clear
+' 
+' Solution 1: Check you pasted it in the WORKSHEET module
+'   - Right-click sheet tab → View Code
+'   - You should see "Base Sample Calculator (Code)" at the top
+'   - NOT "Module1" or "Module2"
+' 
+' Solution 2: Check macros are enabled
+'   - File → Options → Trust Center → Trust Center Settings
+'   - Macro Settings → Enable all macros (or enable with notification)
+' 
+' Solution 3: Make sure you saved the file as .xlsm (macro-enabled)
+'   - File → Save As → Save as type: Excel Macro-Enabled Workbook (.xlsm)
+' 
+' ============================================================
