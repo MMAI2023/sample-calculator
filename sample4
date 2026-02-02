@@ -1,0 +1,602 @@
+' ============================================================
+' AUDIT SAMPLING CALCULATOR - ADDED FREQUENCY ROW FOR PART 2
+' Updated:
+' - Added frequency row (B17:D17) for Part 2 with "As Needed" only
+' - C18 calculation now uses C16, C6, and C17 (As Needed)
+' - All row numbers adjusted accordingly
+' ============================================================
+
+Sub SetupCalculator()
+    Dim ws As Worksheet
+    Dim sheetExists As Boolean
+    Dim i As Integer
+    
+    ' Check if sheet exists and delete it
+    sheetExists = False
+    Application.DisplayAlerts = False
+    
+    For i = 1 To Sheets.Count
+        If Sheets(i).Name = "Base Sample Calculator" Then
+            sheetExists = True
+            Sheets(i).Delete
+            Exit For
+        End If
+    Next i
+    
+    Application.DisplayAlerts = True
+    
+    ' Create new sheet
+    Set ws = Sheets.Add
+    ws.Name = "Base Sample Calculator"
+    
+    ' Make sure this sheet is active
+    ws.Activate
+    
+    Application.EnableEvents = True
+    
+    ' Turn off gridlines
+    ActiveWindow.DisplayGridlines = False
+    
+    With ws
+        ' Set column widths
+        .Columns("A:A").ColumnWidth = 2
+        .Columns("B:B").ColumnWidth = 38
+        .Columns("C:C").ColumnWidth = 32
+        .Columns("D:D").ColumnWidth = 20
+        .Columns("E:E").ColumnWidth = 2
+        
+        .Cells.Font.Name = "Arial"
+        .Cells.Font.Size = 10
+        
+        ' === ADD OUTER BORDER AROUND ENTIRE CALCULATOR ===
+        .Range("B2:D26").Borders(xlEdgeLeft).Weight = xlMedium
+        .Range("B2:D26").Borders(xlEdgeLeft).Color = RGB(0, 0, 0)
+        .Range("B2:D26").Borders(xlEdgeRight).Weight = xlMedium
+        .Range("B2:D26").Borders(xlEdgeRight).Color = RGB(0, 0, 0)
+        .Range("B2:D26").Borders(xlEdgeTop).Weight = xlMedium
+        .Range("B2:D26").Borders(xlEdgeTop).Color = RGB(0, 0, 0)
+        .Range("B2:D26").Borders(xlEdgeBottom).Weight = xlMedium
+        .Range("B2:D26").Borders(xlEdgeBottom).Color = RGB(0, 0, 0)
+        
+        ' === MAIN TITLE ===
+        .Range("B2:D2").Merge
+        .Range("B2").Value = "Audit Sampling Calculator"
+        .Range("B2").Font.Size = 16
+        .Range("B2").Font.Bold = True
+        .Range("B2").Font.Color = RGB(89, 89, 89)
+        .Range("B2").Interior.Color = RGB(217, 217, 217)
+        .Range("B2").HorizontalAlignment = xlCenter
+        .Range("B2").VerticalAlignment = xlCenter
+        .Range("B2").RowHeight = 30
+        .Range("B2").Borders.Weight = xlThin
+        
+        ' === PART 1 HEADER ===
+        .Range("B3:D3").Merge
+        .Range("B3").Value = "Base Sampling Population Calculator (Part 1)"
+        .Range("B3").Font.Size = 11
+        .Range("B3").Font.Bold = True
+        .Range("B3").Font.Color = RGB(255, 255, 255)
+        .Range("B3").Interior.Color = RGB(89, 89, 89)
+        .Range("B3").HorizontalAlignment = xlCenter
+        .Range("B3").VerticalAlignment = xlCenter
+        .Range("B3").RowHeight = 25
+        .Range("B3").Borders.Weight = xlThin
+        
+        .Range("B4").RowHeight = 8
+        
+        ' === INPUT: POPULATION ===
+        .Range("B5").Value = "Enter the Population:"
+        .Range("B5").Font.Size = 10
+        .Range("B5").VerticalAlignment = xlCenter
+        
+        .Range("C5").Value = 250
+        .Range("C5").Interior.Color = RGB(255, 255, 255)
+        .Range("C5").HorizontalAlignment = xlRight
+        .Range("C5").VerticalAlignment = xlCenter
+        .Range("C5").Borders.Weight = xlThin
+        .Range("C5").RowHeight = 22
+        
+        ' === INPUT: RISK LEVEL ===
+        .Range("B6").Value = "Enter the Risk Level:"
+        .Range("B6").Font.Size = 10
+        .Range("B6").VerticalAlignment = xlCenter
+        
+        .Range("C6").Value = "Medium"
+        .Range("C6").Interior.Color = RGB(255, 255, 255)
+        .Range("C6").HorizontalAlignment = xlLeft
+        .Range("C6").VerticalAlignment = xlCenter
+        .Range("C6").Borders.Weight = xlThin
+        .Range("C6").RowHeight = 22
+        .Range("C6").Validation.Delete
+        .Range("C6").Validation.Add Type:=xlValidateList, Formula1:="Low,Medium,High"
+        
+        ' === INPUT: FREQUENCY ===
+        .Range("B7").Value = "Enter Frequency:"
+        .Range("B7").Font.Size = 10
+        .Range("B7").VerticalAlignment = xlCenter
+        
+        .Range("C7").Value = "As Needed"
+        .Range("C7").Interior.Color = RGB(255, 255, 255)
+        .Range("C7").HorizontalAlignment = xlLeft
+        .Range("C7").VerticalAlignment = xlCenter
+        .Range("C7").Borders.Weight = xlThin
+        .Range("C7").RowHeight = 22
+        .Range("C7").Validation.Delete
+        .Range("C7").Validation.Add Type:=xlValidateList, Formula1:="As Needed,Multiple per day,Daily,Weekly,Bi-Weekly,Monthly,Quarterly,Annually"
+        
+        .Range("B8").RowHeight = 8
+        
+        ' === RESULT: BASE SAMPLE SIZE (B9 and C9) ===
+        .Range("B9").Value = "Base Sample Size:"
+        .Range("B9").Font.Size = 10
+        .Range("B9").Font.Bold = True
+        .Range("B9").VerticalAlignment = xlCenter
+        .Range("B9").Borders(xlEdgeBottom).LineStyle = xlNone
+        
+        .Range("C9").Font.Size = 18
+        .Range("C9").Font.Bold = True
+        .Range("C9").Interior.Color = RGB(255, 192, 0)
+        .Range("C9").HorizontalAlignment = xlRight
+        .Range("C9").VerticalAlignment = xlCenter
+        .Range("C9").Borders.Weight = xlThin
+        .Range("C9").RowHeight = 30
+        .Range("C9").Borders(xlEdgeBottom).LineStyle = xlNone
+        
+        ' === MERGED AREA B10:D12 (button + message area for Part 1) ===
+        .Range("B10:D12").Merge
+        .Range("B10").Font.Size = 8
+        .Range("B10").WrapText = True
+        .Range("B10").VerticalAlignment = xlTop
+        .Range("B10").HorizontalAlignment = xlLeft
+        .Range("B10").Borders.Weight = xlThin
+        .Range("B10").Borders(xlEdgeTop).LineStyle = xlNone
+        
+        .Range("B13").RowHeight = 15
+        
+        ' === PART 2 HEADER ===
+        .Range("B14:D14").Merge
+        .Range("B14").Value = "Sub-Sampling Population Calculator (Part 2)"
+        .Range("B14").Font.Size = 11
+        .Range("B14").Font.Bold = True
+        .Range("B14").Font.Color = RGB(255, 255, 255)
+        .Range("B14").Interior.Color = RGB(89, 89, 89)
+        .Range("B14").HorizontalAlignment = xlCenter
+        .Range("B14").VerticalAlignment = xlCenter
+        .Range("B14").RowHeight = 25
+        .Range("B14").Borders.Weight = xlThin
+        
+        .Range("B15").RowHeight = 8
+        
+        ' === INPUT: SUB-POPULATION ===
+        .Range("B16").Value = "Enter the Population of Sub Samples within the Base Sample:"
+        .Range("B16").Font.Size = 9
+        .Range("B16").WrapText = True
+        .Range("B16").VerticalAlignment = xlCenter
+        
+        .Range("C16").Value = 150
+        .Range("C16").Interior.Color = RGB(255, 255, 255)
+        .Range("C16").HorizontalAlignment = xlRight
+        .Range("C16").VerticalAlignment = xlCenter
+        .Range("C16").Borders.Weight = xlThin
+        .Range("B16").RowHeight = 30
+        
+        ' ? NEW: INPUT: FREQUENCY FOR PART 2 (row 17)
+        .Range("B17").Value = "Enter Frequency:"
+        .Range("B17").Font.Size = 10
+        .Range("B17").VerticalAlignment = xlCenter
+        
+        .Range("C17").Value = "As Needed"
+        .Range("C17").Interior.Color = RGB(255, 255, 255)
+        .Range("C17").HorizontalAlignment = xlLeft
+        .Range("C17").VerticalAlignment = xlCenter
+        .Range("C17").Borders.Weight = xlThin
+        .Range("C17").RowHeight = 22
+        .Range("C17").Validation.Delete
+        ' ? Only "As Needed" option available
+        .Range("C17").Validation.Add Type:=xlValidateList, Formula1:="As Needed"
+        
+        .Range("B18").RowHeight = 8
+        
+        ' === RESULT: SUB-SAMPLE SIZE (B19 and C19) - moved down one row ===
+        .Range("B19").Value = "Sub-Sample Size:"
+        .Range("B19").Font.Size = 10
+        .Range("B19").VerticalAlignment = xlCenter
+        .Range("B19").Borders(xlEdgeBottom).LineStyle = xlNone
+        
+        .Range("C19").Font.Size = 18
+        .Range("C19").Font.Bold = True
+        .Range("C19").Interior.Color = RGB(255, 192, 0)
+        .Range("C19").HorizontalAlignment = xlRight
+        .Range("C19").VerticalAlignment = xlCenter
+        .Range("C19").Borders.Weight = xlThin
+        .Range("C19").RowHeight = 30
+        .Range("C19").Borders(xlEdgeBottom).LineStyle = xlNone
+        
+        ' === MERGED AREA B20:D22 (button + message area for Part 2) - moved down one row ===
+        .Range("B20:D22").Merge
+        .Range("B20").Font.Size = 8
+        .Range("B20").WrapText = True
+        .Range("B20").VerticalAlignment = xlTop
+        .Range("B20").HorizontalAlignment = xlLeft
+        .Range("B20").Borders.Weight = xlThin
+        .Range("B20").Borders(xlEdgeTop).LineStyle = xlNone
+        
+        .Range("B23").RowHeight = 10
+        
+        ' === COMMENTS HEADER (B24:D24) - moved down one row ===
+        .Range("B24:D24").Merge
+        .Range("B24").Value = "Comments:"
+        .Range("B24").Font.Size = 9
+        .Range("B24").Font.Bold = True
+        .Range("B24").VerticalAlignment = xlTop
+        .Range("B24").RowHeight = 15
+        
+        ' Add borders to all edges
+        .Range("B24").Borders(xlEdgeLeft).Weight = xlThin
+        .Range("B24").Borders(xlEdgeLeft).Color = RGB(0, 0, 0)
+        .Range("B24").Borders(xlEdgeRight).Weight = xlThin
+        .Range("B24").Borders(xlEdgeRight).Color = RGB(0, 0, 0)
+        .Range("B24").Borders(xlEdgeTop).Weight = xlThin
+        .Range("B24").Borders(xlEdgeTop).Color = RGB(0, 0, 0)
+        .Range("B24").Borders(xlEdgeBottom).Weight = xlThin
+        .Range("B24").Borders(xlEdgeBottom).Color = RGB(0, 0, 0)
+        
+        ' === COMMENTS DETAILS (B25:D26) - moved down one row ===
+        .Range("B25:D26").Merge
+        .Range("B25").Value = "If the base sample size is large and requires sub-sampling, follow the steps below to perform the sub-sampling process:" & vbCrLf & _
+                              "Step 1: Sub-Population Sampling - Sampling done based on Frequency to created sub-population," & vbCrLf & _
+                              "Step 2: Sub-Sample Sampling - Further sampling on the sub-population based on size you provided"
+        .Range("B25").Font.Size = 8
+        .Range("B25").Interior.Color = RGB(242, 242, 242)
+        .Range("B25").WrapText = True
+        .Range("B25").VerticalAlignment = xlTop
+        .Range("B25").Borders.Weight = xlThin
+        .Range("B25").RowHeight = 60
+        
+    End With
+    
+    MsgBox "Setup complete!" & vbCrLf & vbCrLf & _
+           "NOW ADD BUTTONS:" & vbCrLf & _
+           "1. Go to Developer tab > Insert > Button (Form Control)" & vbCrLf & _
+           "2. Draw button in the B10:D12 area (Part 1)" & vbCrLf & _
+           "3. Assign macro: CalculateResult" & vbCrLf & _
+           "4. Label it: 'Calculate Base Sample'" & vbCrLf & vbCrLf & _
+           "5. Draw another button in the B20:D22 area (Part 2)" & vbCrLf & _
+           "6. Assign macro: CalculateSubSample" & vbCrLf & _
+           "7. Label it: 'Calculate Sample Size'", vbInformation, "Setup Complete"
+End Sub
+
+Sub CalculateResult()
+    ' PART 1: Messages show in B10 (merged B10:D12)
+    Application.EnableEvents = True
+    Dim ws As Worksheet
+    Dim population As Long, riskLevel As String, frequency As String
+    Dim sampleSize As Variant, errorMsg As String
+    
+    Set ws = ActiveSheet
+    
+    ws.Range("C9").Value = ""
+    ws.Range("B10").Value = ""
+    
+    On Error Resume Next
+    population = CLng(ws.Range("C5").Value)
+    On Error GoTo 0
+    riskLevel = Trim(ws.Range("C6").Value)
+    frequency = Trim(ws.Range("C7").Value)
+    
+    If population < 1 Then
+        ws.Range("B10").Value = "Error: Please enter a valid population (minimum 1)"
+        ws.Range("B10").Font.Color = RGB(255, 0, 0)
+        Exit Sub
+    End If
+    If riskLevel = "" Then
+        ws.Range("B10").Value = "Error: Please select a risk level"
+        ws.Range("B10").Font.Color = RGB(255, 0, 0)
+        Exit Sub
+    End If
+    If frequency = "" Then
+        ws.Range("B10").Value = "Error: Please select a frequency"
+        ws.Range("B10").Font.Color = RGB(255, 0, 0)
+        Exit Sub
+    End If
+    
+    sampleSize = CalculateSampleSize(population, riskLevel, frequency, errorMsg)
+    
+    If errorMsg <> "" Then
+        ws.Range("B10").Value = errorMsg
+        ws.Range("B10").Font.Color = RGB(255, 0, 0)
+        ws.Range("C9").Value = ""
+    Else
+        ws.Range("C9").Value = sampleSize
+        ws.Range("C9").NumberFormat = "0"
+        
+        With ws.Range("C9")
+            .Font.Size = 18
+            .Font.Bold = True
+            .Interior.Color = RGB(255, 192, 0)
+            .HorizontalAlignment = xlRight
+            .VerticalAlignment = xlCenter
+        End With
+        
+        Dim explanation As String
+        If frequency = "As Needed" Then
+            If population > 250 Then
+                explanation = "Population (" & population & ") is greater than 250. Frequency: As Needed. For Risk Level '" & riskLevel & "', using Multiple per day values. Sample size: " & sampleSize
+            Else
+                explanation = "Population (" & population & ") calculated using interpolation method with Risk Level '" & riskLevel & "'. Frequency: As Needed. Sample size: " & sampleSize & " (rounded up)."
+            End If
+        ElseIf frequency = "Multiple per day" Then
+            explanation = "Frequency: Multiple per day (Population > 250) | Risk: " & riskLevel & " | Sample: " & sampleSize
+        Else
+            explanation = "Frequency: " & frequency & " | Expected Pop: " & GetExpectedPop(frequency) & " | Risk: " & riskLevel & " | Sample: " & sampleSize
+        End If
+        
+        ws.Range("B10").Value = explanation
+        ws.Range("B10").Font.Color = RGB(0, 128, 0)
+    End If
+End Sub
+
+Sub CalculateSubSample()
+    ' PART 2: Messages show in B20 (merged B20:D22)
+    ' ? Now uses C16 (sub-population), C6 (risk from Part 1), and C17 (frequency = "As Needed")
+    Application.EnableEvents = True
+    Dim ws As Worksheet
+    Dim subPop As Long, riskLevel As String, frequency As String
+    Dim subSampleSize As Variant, errorMsg As String
+    
+    Set ws = ActiveSheet
+    
+    ws.Range("C19").Value = ""
+    ws.Range("B20").Value = ""
+    
+    On Error Resume Next
+    subPop = CLng(ws.Range("C16").Value)
+    On Error GoTo 0
+    riskLevel = Trim(ws.Range("C6").Value)  ' From Part 1
+    frequency = Trim(ws.Range("C17").Value)  ' ? From new C17 (should be "As Needed")
+    
+    If subPop < 1 Then
+        ws.Range("B20").Value = "Error: Please enter a valid sub-population (minimum 1)"
+        ws.Range("B20").Font.Color = RGB(255, 0, 0)
+        Exit Sub
+    End If
+    If riskLevel = "" Then
+        ws.Range("B20").Value = "Error: Please complete Part 1 first (Risk Level required)"
+        ws.Range("B20").Font.Color = RGB(255, 0, 0)
+        Exit Sub
+    End If
+    If frequency = "" Then
+        ws.Range("B20").Value = "Error: Please select frequency (should be 'As Needed')"
+        ws.Range("B20").Font.Color = RGB(255, 0, 0)
+        Exit Sub
+    End If
+    
+    ' ? Calculate using C16 (subPop), C6 (riskLevel), and C17 (frequency)
+    subSampleSize = CalculateSampleSize(subPop, riskLevel, frequency, errorMsg)
+    
+    If errorMsg <> "" Then
+        ws.Range("B20").Value = errorMsg
+        ws.Range("B20").Font.Color = RGB(255, 0, 0)
+        ws.Range("C19").Value = ""
+    Else
+        ws.Range("C19").Value = subSampleSize
+        ws.Range("C19").NumberFormat = "0"
+        
+        With ws.Range("C19")
+            .Font.Size = 18
+            .Font.Bold = True
+            .Interior.Color = RGB(255, 192, 0)
+            .HorizontalAlignment = xlRight
+            .VerticalAlignment = xlCenter
+        End With
+        
+        ws.Range("B20").Value = "Sub-population: " & subPop & " | Risk: " & riskLevel & " | Frequency: " & frequency & " | Sub-sample size: " & subSampleSize
+        ws.Range("B20").Font.Color = RGB(0, 128, 0)
+    End If
+End Sub
+
+Function CalculateSampleSize(population As Long, riskLevel As String, frequency As String, ByRef errorMsg As String) As Variant
+    Dim expectedPopValues As Variant, sampleSize As Long
+    expectedPopValues = Array(250, 52, 24, 12, 4, 1)
+    errorMsg = ""
+    
+    If frequency = "As Needed" Then
+        Dim i As Integer
+        For i = LBound(expectedPopValues) To UBound(expectedPopValues)
+            If population = expectedPopValues(i) Then
+                errorMsg = "Error: Population " & population & " matches standard value. Select specific frequency."
+                CalculateSampleSize = ""
+                Exit Function
+            End If
+        Next i
+        
+        If population > 250 Then
+            Select Case riskLevel
+                Case "Low": sampleSize = 30
+                Case "Medium": sampleSize = 45
+                Case "High": sampleSize = 60
+                Case Else: sampleSize = 45
+            End Select
+        Else
+            sampleSize = InterpolateSampleSize(population, riskLevel)
+        End If
+    Else
+        Dim expectedPop As Long
+        expectedPop = GetExpectedPop(frequency)
+        
+        If frequency = "Multiple per day" Then
+            If population <= 250 Then
+                errorMsg = "Error: 'Multiple per day' requires population > 250. Current: " & population
+                CalculateSampleSize = ""
+                Exit Function
+            End If
+        Else
+            If population <> expectedPop Then
+                errorMsg = "Error: Population " & population & " invalid for " & frequency & ". Expected: " & expectedPop
+                CalculateSampleSize = ""
+                Exit Function
+            End If
+        End If
+        
+        sampleSize = GetSampleSizeFromTable(frequency, riskLevel)
+    End If
+    
+    CalculateSampleSize = sampleSize
+End Function
+
+Function GetExpectedPop(frequency As String) As Long
+    Select Case frequency
+        Case "Multiple per day": GetExpectedPop = 251
+        Case "Daily": GetExpectedPop = 250
+        Case "Weekly": GetExpectedPop = 52
+        Case "Bi-Weekly": GetExpectedPop = 24
+        Case "Monthly": GetExpectedPop = 12
+        Case "Quarterly": GetExpectedPop = 4
+        Case "Annually": GetExpectedPop = 1
+        Case Else: GetExpectedPop = 0
+    End Select
+End Function
+
+Function GetSampleSizeFromTable(frequency As String, riskLevel As String) As Long
+    Dim sampleSize As Long
+    
+    Select Case frequency
+        Case "Multiple per day"
+            Select Case riskLevel
+                Case "Low": sampleSize = 30
+                Case "Medium": sampleSize = 45
+                Case "High": sampleSize = 60
+                Case Else: sampleSize = 45
+            End Select
+        Case "Daily"
+            Select Case riskLevel
+                Case "Low": sampleSize = 20
+                Case "Medium": sampleSize = 25
+                Case "High": sampleSize = 30
+                Case Else: sampleSize = 25
+            End Select
+        Case "Weekly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 5
+                Case "Medium": sampleSize = 8
+                Case "High": sampleSize = 10
+                Case Else: sampleSize = 8
+            End Select
+        Case "Bi-Weekly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 3
+                Case "Medium": sampleSize = 6
+                Case "High": sampleSize = 8
+                Case Else: sampleSize = 6
+            End Select
+        Case "Monthly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 2
+                Case "Medium": sampleSize = 3
+                Case "High": sampleSize = 5
+                Case Else: sampleSize = 3
+            End Select
+        Case "Quarterly"
+            Select Case riskLevel
+                Case "Low": sampleSize = 2
+                Case "Medium": sampleSize = 2
+                Case "High": sampleSize = 2
+                Case Else: sampleSize = 2
+            End Select
+        Case "Annually"
+            sampleSize = 1
+        Case Else
+            sampleSize = 0
+    End Select
+    
+    GetSampleSizeFromTable = sampleSize
+End Function
+
+Function InterpolateSampleSize(population As Long, riskLevel As String) As Long
+    Dim table As Variant, i As Integer
+    Dim x1 As Long, y1 As Long, x2 As Long, y2 As Long, result As Double
+    
+    Select Case riskLevel
+        Case "Low"
+            table = Array(Array(250, 20), Array(52, 5), Array(24, 3), Array(12, 2), Array(4, 2), Array(1, 1))
+        Case "Medium"
+            table = Array(Array(250, 25), Array(52, 8), Array(24, 6), Array(12, 3), Array(4, 2), Array(1, 1))
+        Case "High"
+            table = Array(Array(250, 30), Array(52, 10), Array(24, 8), Array(12, 5), Array(4, 2), Array(1, 1))
+        Case Else
+            table = Array(Array(250, 25), Array(52, 8), Array(24, 6), Array(12, 3), Array(4, 2), Array(1, 1))
+    End Select
+    
+    For i = LBound(table) To UBound(table)
+        If population = table(i)(0) Then
+            InterpolateSampleSize = table(i)(1)
+            Exit Function
+        End If
+    Next i
+    
+    For i = LBound(table) To UBound(table) - 1
+        x1 = table(i)(0)
+        y1 = table(i)(1)
+        x2 = table(i + 1)(0)
+        y2 = table(i + 1)(1)
+        
+        If population < x1 And population > x2 Then
+            result = y1 + ((population - x1) * (y2 - y1)) / (x2 - x1)
+            InterpolateSampleSize = Application.WorksheetFunction.RoundUp(result, 0)
+            Exit Function
+        End If
+    Next i
+    
+    If population > table(LBound(table))(0) Then
+        InterpolateSampleSize = table(LBound(table))(1)
+    ElseIf population < table(UBound(table))(0) Then
+        InterpolateSampleSize = table(UBound(table))(1)
+    Else
+        InterpolateSampleSize = table(LBound(table))(1)
+    End If
+End Function
+
+Sub ClearPart1()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    On Error Resume Next
+    
+    ws.Range("C5").ClearContents
+    ws.Range("C6").ClearContents
+    ws.Range("C7").ClearContents
+    ws.Range("C9").ClearContents
+    ws.Range("B10").ClearContents
+    
+    ws.Range("C5").Value = 250
+    ws.Range("C5").NumberFormat = "0"
+    ws.Range("C6").Value = "Medium"
+    ws.Range("C7").Value = "As Needed"
+    
+    On Error GoTo 0
+End Sub
+
+Sub ClearPart2()
+    Dim ws As Worksheet
+    Set ws = ActiveSheet
+    
+    On Error Resume Next
+    
+    ws.Range("C16").ClearContents
+    ws.Range("C17").ClearContents  ' ? Clear new frequency cell
+    ws.Range("C19").ClearContents  ' ? Updated from C18 to C19
+    ws.Range("B20").ClearContents  ' ? Updated from B19 to B20
+    
+    ws.Range("C16").Value = 150
+    ws.Range("C16").NumberFormat = "0"
+    ws.Range("C17").Value = "As Needed"  ' ? Set default for Part 2 frequency
+    
+    On Error GoTo 0
+End Sub
+
+Sub ClearAll()
+    ClearPart1
+    ClearPart2
+End Sub
+
+
