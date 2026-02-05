@@ -1,0 +1,193 @@
+/**
+ * Power Automate entrypoint.
+ * - Writes inputs to the same cells your VBA uses (C5/C6/C7 for Part 1, C16/C17 for Part 2).
+ * - Runs the same sample size logic (including As Needed special rules + interpolation).
+ * - Writes outputs to C9 (base) and C19 (sub) and returns them to Power Automate.
+ */
+function main(
+  workbook: ExcelScript.Workbook,
+  population: number,
+  riskLevel: string,
+  frequency: string,
+  subPop?: number // optional; pass if you want Part 2
+): { baseSampleSize: number; subSampleSize?: number } {
+  const ws = getOrCreateSheet(workbook, "Base Sample Calculator");
+
+  // Normalize inputs
+  const rl = normalizeRisk(riskLevel);
+  const fq = normalizeFrequency(frequency);
+
+  // --- Write inputs (matches your VBA layout) ---
+  ws.getRange("C5").setValue(population);
+  ws.getRange("C6").setValue(rl);
+  ws.getRange("C7").setValue(fq);
+
+  // Part 2 in your VBA: risk comes from C6; frequency is fixed "As Needed" in C17
+  if (subPop !== undefined && subPop !== null) {
+    ws.getRange("C16").setValue(subPop);
+    ws.getRange("C17").setValue("As Needed");
+  }
+
+  // --- Calculate Part 1 ---
+  const base = calculateSampleSize(population, rl, fq);
+  ws.getRange("C9").setValue(base);
+
+  // --- Calculate Part 2 (optional) ---
+  let sub: number | undefined = undefined;
+  if (subPop !== undefined && subPop !== null) {
+    sub = calculateSampleSize(subPop, rl, "As Needed");
+    ws.getRange("C19").setValue(sub);
+  }
+
+  return { baseSampleSize: base, subSampleSize: sub };
+}
+
+/* ---------------- Helpers ---------------- */
+
+function getOrCreateSheet(workbook: ExcelScript.Workbook, name: string): ExcelScript.Worksheet {
+  const existing = workbook.getWorksheet(name);
+  if (existing) return existing;
+  const ws = workbook.addWorksheet(name);
+  return ws;
+}
+
+function normalizeRisk(riskLevel: string): "Low" | "Medium" | "High" {
+  const v = (riskLevel ?? "").trim().toLowerCase();
+  if (v === "low") return "Low";
+  if (v === "medium" || v === "med") return "Medium";
+  if (v === "high") return "High";
+  throw new Error(`riskLevel must be Low/Medium/High. Got: ${riskLevel}`);
+}
+
+function normalizeFrequency(freq: string): string {
+  const v = (freq ?? "").trim();
+  if (!v) throw new Error("frequency is required.");
+
+  // Accept some common variants if users type them
+  const map: Record<string, string> = {
+    "as needed": "As Needed",
+    "multiple per day": "Multiple per day",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "bi-weekly": "Bi-Weekly",
+    "biweekly": "Bi-Weekly",
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+    "annually": "Annually",
+    "annual": "Annually"
+  };
+
+  const key = v.toLowerCase();
+  return map[key] ?? v; // keep as-is if already matches your list exactly
+}
+
+function calculateSampleSize(population: number, riskLevel: "Low" | "Medium" | "High", frequency: string): number {
+  if (!Number.isFinite(population) || population < 1) {
+    throw new Error(`Population must be >= 1. Got: ${population}`);
+  }
+
+  const expectedPopValues = [250, 52, 24, 12, 4, 1];
+
+  if (frequency === "As Needed") {
+    // VBA rule: if population matches standard values, error
+    if (expectedPopValues.includes(population)) {
+      throw new Error(`Population ${population} matches standard value. Select specific frequency.`);
+    }
+
+    if (population > 250) {
+      // VBA rule: use Multiple per day values
+      if (riskLevel === "Low") return 30;
+      if (riskLevel === "Medium") return 45;
+      return 60; // High
+    }
+
+    return interpolateSampleSize(population, riskLevel);
+  }
+
+  // Non-"As Needed"
+  const expectedPop = getExpectedPop(frequency);
+
+  if (frequency === "Multiple per day") {
+    if (population <= 250) {
+      throw new Error(`'Multiple per day' requires population > 250. Current: ${population}`);
+    }
+    return getSampleSizeFromTable(frequency, riskLevel);
+  }
+
+  if (population !== expectedPop) {
+    throw new Error(`Population ${population} invalid for ${frequency}. Expected: ${expectedPop}`);
+  }
+
+  return getSampleSizeFromTable(frequency, riskLevel);
+}
+
+function getExpectedPop(frequency: string): number {
+  switch (frequency) {
+    case "Multiple per day": return 251; // matches your VBA placeholder logic
+    case "Daily": return 250;
+    case "Weekly": return 52;
+    case "Bi-Weekly": return 24;
+    case "Monthly": return 12;
+    case "Quarterly": return 4;
+    case "Annually": return 1;
+    default: return 0;
+  }
+}
+
+function getSampleSizeFromTable(frequency: string, riskLevel: "Low" | "Medium" | "High"): number {
+  if (frequency === "Multiple per day") {
+    return riskLevel === "Low" ? 30 : riskLevel === "Medium" ? 45 : 60;
+  }
+  if (frequency === "Daily") {
+    return riskLevel === "Low" ? 20 : riskLevel === "Medium" ? 25 : 30;
+  }
+  if (frequency === "Weekly") {
+    return riskLevel === "Low" ? 5 : riskLevel === "Medium" ? 8 : 10;
+  }
+  if (frequency === "Bi-Weekly") {
+    return riskLevel === "Low" ? 3 : riskLevel === "Medium" ? 6 : 8;
+  }
+  if (frequency === "Monthly") {
+    return riskLevel === "Low" ? 2 : riskLevel === "Medium" ? 3 : 5;
+  }
+  if (frequency === "Quarterly") {
+    return 2;
+  }
+  if (frequency === "Annually") {
+    return 1;
+  }
+  return 0;
+}
+
+function interpolateSampleSize(population: number, riskLevel: "Low" | "Medium" | "High"): number {
+  // Your VBA tables (x=population point, y=sample)
+  let table: Array<[number, number]>;
+  if (riskLevel === "Low") {
+    table = [[250, 20], [52, 5], [24, 3], [12, 2], [4, 2], [1, 1]];
+  } else if (riskLevel === "Medium") {
+    table = [[250, 25], [52, 8], [24, 6], [12, 3], [4, 2], [1, 1]];
+  } else {
+    table = [[250, 30], [52, 10], [24, 8], [12, 5], [4, 2], [1, 1]];
+  }
+
+  // Exact match
+  for (const [x, y] of table) {
+    if (population === x) return y;
+  }
+
+  // Interpolate between descending x values
+  for (let i = 0; i < table.length - 1; i++) {
+    const [x1, y1] = table[i];
+    const [x2, y2] = table[i + 1];
+
+    if (population < x1 && population > x2) {
+      const result = y1 + ((population - x1) * (y2 - y1)) / (x2 - x1);
+      return Math.ceil(result); // VBA RoundUp
+    }
+  }
+
+  // Outside bounds
+  if (population > table[0][0]) return table[0][1];
+  if (population < table[table.length - 1][0]) return table[table.length - 1][1];
+  return table[0][1];
+}
