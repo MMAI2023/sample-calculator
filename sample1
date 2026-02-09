@@ -13,6 +13,21 @@
 ' 7. After setup, just enter values in the yellow cells and the result appears automatically!
 '
 ' ============================================================
+'
+' POWER AUTOMATE INTEGRATION:
+' This script uses fixed cell references for easy integration with Power Automate.
+'
+' INPUTS (write to these cells before calling CalculateResult):
+'   C4 = Population (numeric, minimum 1)
+'   C6 = Risk Level ("Low", "Medium", or "High")
+'   C8 = Frequency ("As Needed", "Multiple per day", "Daily", "Weekly",
+'                    "Bi-Weekly", "Monthly", "Quarterly", "Annually")
+'
+' OUTPUTS (read from these cells after calling CalculateResult):
+'   C10 = Base Sample Size (numeric result)
+'   B12 = Status/Error message (empty if successful)
+'
+' ============================================================
 
 
 ' Run this macro ONCE to set up the calculator interface
@@ -52,7 +67,7 @@ Sub SetupCalculator()
         .Range("C8").Interior.Color = RGB(255, 255, 200) ' Yellow
         .Range("C8").Borders.LineStyle = xlContinuous
         .Range("C8").Validation.Delete
-        .Range("C8").Validation.Add Type:=xlValidateList, Formula1:="N/A,Multiple per day,Daily,Weekly,Bi-Weekly,Monthly,Quarterly,Annually"
+        .Range("C8").Validation.Add Type:=xlValidateList, Formula1:="As Needed,Multiple per day,Daily,Weekly,Bi-Weekly,Monthly,Quarterly,Annually"
         
         ' Result section
         .Range("B10").Value = "Base Sample Size:"
@@ -142,24 +157,14 @@ Sub CalculateResult()
     
     ' Calculate sample size
     sampleSize = CalculateSampleSize(population, riskLevel, frequency, errorMsg)
-    ws.Range("D10").Font.Color = RGB(255, 255, 255) ' White font
     
     If errorMsg <> "" Then
         ws.Range("B12").Value = errorMsg
-        ws.Range("D10").Value = " "
+        ws.Range("C10").Value = ""
     Else
-        ws.Range("D10").Value = sampleSize
+        ws.Range("C10").Value = sampleSize
+        ws.Range("B12").Value = ""
     End If
-    
-    ' Save current values in D4, D6, D8 with white font (hidden)
-    ws.Range("D4").Value = ws.Range("C4").Value
-    ws.Range("D4").Font.Color = RGB(255, 255, 255) ' White font
-    
-    ws.Range("D6").Value = ws.Range("C6").Value
-    ws.Range("D6").Font.Color = RGB(255, 255, 255) ' White font
-    
-    ws.Range("D8").Value = ws.Range("C8").Value
-    ws.Range("D8").Font.Color = RGB(255, 255, 255) ' White font
 End Sub
 
 Function CalculateSampleSize(population As Long, riskLevel As String, frequency As String, ByRef errorMsg As String) As Variant
@@ -170,13 +175,13 @@ Application.EnableEvents = True
     expectedPopValues = Array(250, 52, 24, 12, 4, 1)
     errorMsg = ""
     
-    ' Handle N/A frequency
-    If frequency = "N/A" Then
+    ' Handle As Needed frequency
+    If frequency = "As Needed" Then
         ' Check if population matches expected pop values
         Dim i As Integer
         For i = LBound(expectedPopValues) To UBound(expectedPopValues)
             If population = expectedPopValues(i) Then
-                errorMsg = "Error: Population " & population & " matches a standard expected population value. Please select a specific frequency instead of N/A."
+                errorMsg = "Error: Population " & population & " matches a standard expected population value. Please select a specific frequency instead of As Needed."
                 CalculateSampleSize = ""
                 Exit Function
             End If
