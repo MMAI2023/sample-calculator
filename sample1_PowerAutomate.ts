@@ -4,6 +4,16 @@
  * This Office Script can be called directly from Power Automate
  * to calculate the base sample size for audit sampling.
  *
+ * It writes inputs to the worksheet cells, calculates the result,
+ * and writes the output back — keeping everything aligned.
+ *
+ * WORKSHEET CELL MAPPING:
+ *   C4  = Population (input)
+ *   C6  = Risk Level (input)
+ *   C8  = Frequency (input)
+ *   C10 = Base Sample Size (output)
+ *   B12 = Status/Error message (output)
+ *
  * INPUTS (function parameters):
  *   population : number  - The actual population size (minimum 1)
  *   riskLevel  : string  - "Low", "Medium", or "High"
@@ -20,23 +30,52 @@ function main(
   riskLevel: string,
   frequency: string
 ): { sampleSize: number; error: string } {
+  // Get the worksheet
+  let ws = workbook.getWorksheet("Base Sample Calculator");
+
+  // Write inputs to cells for alignment
+  if (ws) {
+    ws.getRange("C4").setValue(population);
+    ws.getRange("C6").setValue(riskLevel);
+    ws.getRange("C8").setValue(frequency);
+  }
+
   // Validate inputs
   if (population < 1) {
-    return { sampleSize: 0, error: "Please enter a valid population (minimum 1)" };
+    const errorMsg = "Please enter a valid population (minimum 1)";
+    if (ws) { ws.getRange("B12").setValue(errorMsg); ws.getRange("C10").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
   if (!["Low", "Medium", "High"].includes(riskLevel)) {
-    return { sampleSize: 0, error: "Please select a valid risk level (Low, Medium, or High)" };
+    const errorMsg = "Please select a valid risk level (Low, Medium, or High)";
+    if (ws) { ws.getRange("B12").setValue(errorMsg); ws.getRange("C10").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
   const validFrequencies = [
     "As Needed", "Multiple per day", "Daily", "Weekly",
     "Bi-Weekly", "Monthly", "Quarterly", "Annually"
   ];
   if (!validFrequencies.includes(frequency)) {
-    return { sampleSize: 0, error: "Please select a valid frequency" };
+    const errorMsg = "Please select a valid frequency";
+    if (ws) { ws.getRange("B12").setValue(errorMsg); ws.getRange("C10").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
 
   // Calculate sample size
-  return calculateSampleSize(population, riskLevel, frequency);
+  const result = calculateSampleSize(population, riskLevel, frequency);
+
+  // Write outputs to cells for alignment
+  if (ws) {
+    if (result.error) {
+      ws.getRange("B12").setValue(result.error);
+      ws.getRange("C10").setValue("");
+    } else {
+      ws.getRange("C10").setValue(result.sampleSize);
+      ws.getRange("B12").setValue("");
+    }
+  }
+
+  return result;
 }
 
 function calculateSampleSize(

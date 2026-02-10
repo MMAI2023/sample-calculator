@@ -4,75 +4,137 @@
  * This Office Script can be called directly from Power Automate
  * to calculate both base sample size and sub-sample size.
  *
- * FUNCTION: main (Base Sampling - Part 1)
- * INPUTS:
- *   population : number  - The actual population size (minimum 1)
- *   riskLevel  : string  - "Low", "Medium", or "High"
- *   frequency  : string  - "As Needed", "Multiple per day", "Daily", "Weekly",
- *                           "Bi-Weekly", "Monthly", "Quarterly", "Annually"
+ * It writes inputs to the worksheet cells, calculates the result,
+ * and writes the output back — keeping everything aligned.
+ *
+ * USAGE FROM POWER AUTOMATE:
+ *   Set calculationType = "base" for Part 1 (Base Sampling)
+ *   Set calculationType = "sub"  for Part 2 (Sub-Sampling)
+ *
+ * WORKSHEET CELL MAPPING:
+ *   PART 1: C5=Population, C6=Risk Level, C7=Frequency, C9=Result, B10=Message
+ *   PART 2: C16=Sub-Population, C17=Frequency, C19=Result, B20=Message
+ *           (C6=Risk Level is shared from Part 1, not overwritten)
+ *
+ * INPUTS (function parameters):
+ *   calculationType : string  - "base" for Part 1, "sub" for Part 2
+ *   population      : number  - Population or sub-population size (minimum 1)
+ *   riskLevel       : string  - "Low", "Medium", or "High"
+ *   frequency       : string  - Frequency selection
  *
  * OUTPUTS (returned object):
- *   baseSampleSize : number  - The calculated base sample size (0 if error)
- *   error          : string  - Error message (empty string if successful)
- *
- * FUNCTION: calculateSubSampleResult (Sub-Sampling - Part 2)
- * INPUTS:
- *   subPopulation : number  - The sub-population size (minimum 1)
- *   riskLevel     : string  - "Low", "Medium", or "High" (same as Part 1)
- *   frequency     : string  - "As Needed"
- *
- * OUTPUTS (returned object):
- *   subSampleSize : number  - The calculated sub-sample size (0 if error)
- *   error         : string  - Error message (empty string if successful)
+ *   sampleSize : number  - The calculated sample size (0 if error)
+ *   error      : string  - Error message (empty string if successful)
  */
 function main(
   workbook: ExcelScript.Workbook,
+  calculationType: string,
   population: number,
   riskLevel: string,
   frequency: string
-): { baseSampleSize: number; error: string } {
+): { sampleSize: number; error: string } {
+  let ws = workbook.getWorksheet("Base Sample Calculator");
+
+  if (calculationType === "sub") {
+    return calculateSubSampleWithSheet(ws, population, riskLevel, frequency);
+  } else {
+    return calculateBaseWithSheet(ws, population, riskLevel, frequency);
+  }
+}
+
+function calculateBaseWithSheet(
+  ws: ExcelScript.Worksheet | undefined,
+  population: number,
+  riskLevel: string,
+  frequency: string
+): { sampleSize: number; error: string } {
+  // Write inputs to Part 1 cells
+  if (ws) {
+    ws.getRange("C5").setValue(population);
+    ws.getRange("C6").setValue(riskLevel);
+    ws.getRange("C7").setValue(frequency);
+  }
+
   // Validate inputs
   if (population < 1) {
-    return { baseSampleSize: 0, error: "Please enter a valid population (minimum 1)" };
+    const errorMsg = "Error: Please enter a valid population (minimum 1)";
+    if (ws) { ws.getRange("B10").setValue(errorMsg); ws.getRange("C9").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
   if (!["Low", "Medium", "High"].includes(riskLevel)) {
-    return { baseSampleSize: 0, error: "Please select a valid risk level (Low, Medium, or High)" };
+    const errorMsg = "Error: Please select a valid risk level (Low, Medium, or High)";
+    if (ws) { ws.getRange("B10").setValue(errorMsg); ws.getRange("C9").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
   const validFrequencies = [
     "As Needed", "Multiple per day", "Daily", "Weekly",
     "Bi-Weekly", "Monthly", "Quarterly", "Annually"
   ];
   if (!validFrequencies.includes(frequency)) {
-    return { baseSampleSize: 0, error: "Please select a valid frequency" };
+    const errorMsg = "Error: Please select a valid frequency";
+    if (ws) { ws.getRange("B10").setValue(errorMsg); ws.getRange("C9").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
 
   const result = calculateSampleSize(population, riskLevel, frequency);
-  return { baseSampleSize: result.sampleSize, error: result.error };
+
+  // Write outputs to Part 1 cells
+  if (ws) {
+    if (result.error) {
+      ws.getRange("B10").setValue(result.error);
+      ws.getRange("C9").setValue("");
+    } else {
+      ws.getRange("C9").setValue(result.sampleSize);
+      ws.getRange("B10").setValue("");
+    }
+  }
+
+  return result;
 }
 
-/**
- * Call this function from a separate Power Automate "Run script" action
- * for Part 2 sub-sampling calculation.
- */
-function calculateSubSampleResult(
-  workbook: ExcelScript.Workbook,
+function calculateSubSampleWithSheet(
+  ws: ExcelScript.Worksheet | undefined,
   subPopulation: number,
   riskLevel: string,
   frequency: string
-): { subSampleSize: number; error: string } {
+): { sampleSize: number; error: string } {
+  // Write inputs to Part 2 cells
+  if (ws) {
+    ws.getRange("C16").setValue(subPopulation);
+    ws.getRange("C17").setValue(frequency);
+  }
+
   // Validate inputs
   if (subPopulation < 1) {
-    return { subSampleSize: 0, error: "Please enter a valid sub-population (minimum 1)" };
+    const errorMsg = "Error: Please enter a valid sub-population (minimum 1)";
+    if (ws) { ws.getRange("B20").setValue(errorMsg); ws.getRange("C19").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
   if (!["Low", "Medium", "High"].includes(riskLevel)) {
-    return { subSampleSize: 0, error: "Please complete Part 1 first (Risk Level required)" };
+    const errorMsg = "Error: Please complete Part 1 first (Risk Level required)";
+    if (ws) { ws.getRange("B20").setValue(errorMsg); ws.getRange("C19").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
   if (frequency !== "As Needed") {
-    return { subSampleSize: 0, error: "Sub-sampling frequency must be 'As Needed'" };
+    const errorMsg = "Error: Sub-sampling frequency must be 'As Needed'";
+    if (ws) { ws.getRange("B20").setValue(errorMsg); ws.getRange("C19").setValue(""); }
+    return { sampleSize: 0, error: errorMsg };
   }
 
   const result = calculateSampleSize(subPopulation, riskLevel, frequency);
-  return { subSampleSize: result.sampleSize, error: result.error };
+
+  // Write outputs to Part 2 cells
+  if (ws) {
+    if (result.error) {
+      ws.getRange("B20").setValue(result.error);
+      ws.getRange("C19").setValue("");
+    } else {
+      ws.getRange("C19").setValue(result.sampleSize);
+      ws.getRange("B20").setValue("");
+    }
+  }
+
+  return result;
 }
 
 function calculateSampleSize(
