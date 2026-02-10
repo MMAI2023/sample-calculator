@@ -5,6 +5,30 @@
 ' - C18 calculation now uses C16, C6, and C17 (As Needed)
 ' - All row numbers adjusted accordingly
 ' ============================================================
+'
+' POWER AUTOMATE INTEGRATION:
+' This script uses fixed cell references for easy integration with Power Automate.
+'
+' PART 1 - BASE SAMPLING:
+'   INPUTS:
+'     C5  = Population (numeric, minimum 1)
+'     C6  = Risk Level ("Low", "Medium", or "High")
+'     C7  = Frequency ("As Needed", "Multiple per day", "Daily", "Weekly",
+'                       "Bi-Weekly", "Monthly", "Quarterly", "Annually")
+'   OUTPUTS:
+'     C9  = Base Sample Size (numeric result)
+'     B10 = Status/Error message (empty if successful)
+'
+' PART 2 - SUB-SAMPLING:
+'   INPUTS:
+'     C16 = Sub-Population (numeric, minimum 1)
+'     C6  = Risk Level (shared from Part 1)
+'     C17 = Frequency ("As Needed")
+'   OUTPUTS:
+'     C19 = Sub-Sample Size (numeric result)
+'     B20 = Status/Error message (empty if successful)
+'
+' ============================================================
 
 Sub SetupCalculator()
     Dim ws As Worksheet
