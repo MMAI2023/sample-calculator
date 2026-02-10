@@ -31,12 +31,22 @@ function main(
   // --- Calculate Part 1 ---
   const base = calculateSampleSize(population, rl, fq);
   ws.getRange("C9").setValue(base);
+  ws.getRange("C9").getFormat().getFont().setBold(true);
+  ws.getRange("C9").getFormat().getFont().setSize(18);
+  ws.getRange("C9").getFormat().getFill().setColor("#FFC000");
+  ws.getRange("C9").setNumberFormatLocal("0");
+  console.log(`Part 1 – Base Sample Size: ${base}`);
 
   // --- Calculate Part 2 (optional) ---
   let sub: number | undefined = undefined;
   if (subPop !== undefined && subPop !== null) {
     sub = calculateSampleSize(subPop, rl, "As Needed");
     ws.getRange("C19").setValue(sub);
+    ws.getRange("C19").getFormat().getFont().setBold(true);
+    ws.getRange("C19").getFormat().getFont().setSize(18);
+    ws.getRange("C19").getFormat().getFill().setColor("#FFC000");
+    ws.getRange("C19").setNumberFormatLocal("0");
+    console.log(`Part 2 – Sub-Sample Size: ${sub}`);
   }
 
   return { baseSampleSize: base, subSampleSize: sub };
@@ -48,7 +58,47 @@ function getOrCreateSheet(workbook: ExcelScript.Workbook, name: string): ExcelSc
   const existing = workbook.getWorksheet(name);
   if (existing) return existing;
   const ws = workbook.addWorksheet(name);
+  setupSheet(ws);
   return ws;
+}
+
+function setupSheet(ws: ExcelScript.Worksheet): void {
+  // Column widths
+  ws.getRange("A:A").getFormat().setColumnWidth(15);
+  ws.getRange("B:B").getFormat().setColumnWidth(285);
+  ws.getRange("C:C").getFormat().setColumnWidth(240);
+  ws.getRange("D:D").getFormat().setColumnWidth(150);
+
+  // Main title
+  ws.getRange("B2").setValue("Audit Sampling Calculator");
+  ws.getRange("B2").getFormat().getFont().setSize(16);
+  ws.getRange("B2").getFormat().getFont().setBold(true);
+  ws.getRange("B2").getFormat().getFill().setColor("#D9D9D9");
+
+  // Part 1 header
+  ws.getRange("B3").setValue("Base Sampling Population Calculator (Part 1)");
+  ws.getRange("B3").getFormat().getFont().setBold(true);
+  ws.getRange("B3").getFormat().getFont().setColor("#FFFFFF");
+  ws.getRange("B3").getFormat().getFill().setColor("#595959");
+
+  // Part 1 labels
+  ws.getRange("B5").setValue("Enter the Population:");
+  ws.getRange("B6").setValue("Enter the Risk Level:");
+  ws.getRange("B7").setValue("Enter Frequency:");
+  ws.getRange("B9").setValue("Base Sample Size:");
+  ws.getRange("B9").getFormat().getFont().setBold(true);
+
+  // Part 2 header
+  ws.getRange("B14").setValue("Sub-Sampling Population Calculator (Part 2)");
+  ws.getRange("B14").getFormat().getFont().setBold(true);
+  ws.getRange("B14").getFormat().getFont().setColor("#FFFFFF");
+  ws.getRange("B14").getFormat().getFill().setColor("#595959");
+
+  // Part 2 labels
+  ws.getRange("B16").setValue("Enter the Population of Sub Samples within the Base Sample:");
+  ws.getRange("B17").setValue("Enter Frequency:");
+  ws.getRange("B19").setValue("Sub-Sample Size:");
+  ws.getRange("B19").getFormat().getFont().setBold(true);
 }
 
 function normalizeRisk(riskLevel: string): "Low" | "Medium" | "High" {
