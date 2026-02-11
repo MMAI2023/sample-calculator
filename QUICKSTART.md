@@ -6,7 +6,7 @@ This is a condensed version of the full integration guide. For complete details,
 Automatically calculate audit sample sizes when new items are added to Monday.com.
 
 ## ⏱️ Time Required
-15-20 minutes for initial setup
+20 minutes for initial setup (including testing)
 
 ## 📋 Prerequisites Checklist
 - [ ] Microsoft 365 account with Power Automate access
@@ -14,7 +14,7 @@ Automatically calculate audit sample sizes when new items are added to Monday.co
 - [ ] Sample Calculator workbook uploaded to OneDrive/SharePoint
 - [ ] Office Script (Sample7) added to the workbook
 
-## 🚀 5-Minute Setup
+## 🚀 Setup Steps
 
 ### 1. Prepare Monday.com Board (3 minutes)
 
@@ -23,7 +23,7 @@ Create/configure a board with these columns:
 - **Risk Level** (Dropdown: Low, Medium, High)
 - **Frequency** (Dropdown: Daily, Weekly, Monthly, etc.)
 - **Base Sample Size** (Number) - for results
-- **Sub Sample Size** (Number) - for results (optional)
+- **Sub-Sample Size** (Number) - for results (optional)
 
 ### 2. Create Power Automate Flow (5 minutes)
 
