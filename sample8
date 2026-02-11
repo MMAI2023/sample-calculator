@@ -1,0 +1,488 @@
+/**
+ * ============================================================
+ * AUDIT SAMPLING CALCULATOR — Office Script
+ * Compatible with Excel Online + Power Automate
+ *
+ * HOW IT WORKS:
+ *   Power Automate calls this script via "Run script" action,
+ *   passing population, riskLevel, frequency, and optional
+ *   sub-sample parameters. The script calculates sample sizes,
+ *   logs results to a "Calculation Log" sheet, and returns a
+ *   plain object that Power Automate can read and pass back
+ *   to the Copilot agent as formatted text.
+ *
+ * PARAMETERS (passed in by Power Automate):
+ *   population        — total number of items to audit (e.g. 150)
+ *   riskLevel         — "Low" | "Medium" | "High"
+ *   frequency         — "As Needed" | "Daily" | "Weekly" |
+ *                       "Bi-Weekly" | "Monthly" | "Quarterly" |
+ *                       "Annually" | "Multiple per day"
+ *   calculateSubSample — true/false (default false)
+ *   subPopulation     — number, required if calculateSubSample=true
+ *
+ * RETURNS (read by Power Automate "Run script" output):
+ *   success           — true if calculation succeeded
+ *   error             — error message string (empty if success)
+ *   baseSampleSize    — calculated base sample size
+ *   subSampleSize     — calculated sub-sample size (0 if not used)
+ *   responseText      — plain text summary for Copilot chat
+ *   calculationDetails — methodology explanation
+ * ============================================================
+ */
+
+function main(
+    workbook: ExcelScript.Workbook,
+    population: number,
+    riskLevel: string,
+    frequency: string,
+    calculateSubSample: boolean,
+    subPopulation: number
+): {
+    success: boolean;
+    error: string;
+    baseSampleSize: number;
+    subSampleSize: number;
+    responseText: string;
+    calculationDetails: string;
+} {
+
+    // --- Apply defaults for optional parameters ---
+    if (!riskLevel) riskLevel = "Medium";
+    if (!frequency) frequency = "As Needed";
+    if (calculateSubSample === undefined || calculateSubSample === null) calculateSubSample = false;
+    if (!subPopulation) subPopulation = 0;
+
+    // --- Validate inputs ---
+    const validationError = validateInputs(population, riskLevel, frequency, calculateSubSample, subPopulation);
+    if (validationError !== "") {
+        return buildErrorResult(validationError);
+    }
+
+    // --- Part 1: Base sample calculation ---
+    const baseSampleSize = calculateSampleSize(population, riskLevel, frequency);
+    if (baseSampleSize < 0) {
+        const errMsg = getCalculationError(population, riskLevel, frequency);
+        return buildErrorResult(errMsg);
+    }
+
+    // --- Part 2: Sub-sample calculation (optional) ---
+    let subSampleSize = 0;
+    if (calculateSubSample && subPopulation > 0) {
+        subSampleSize = calculateSampleSize(subPopulation, riskLevel, "As Needed");
+        if (subSampleSize < 0) {
+            const errMsg = getCalculationError(subPopulation, riskLevel, "As Needed");
+            return buildErrorResult(errMsg);
+        }
+    }
+
+    // --- Write results to Calculation Log sheet ---
+    logToSheet(workbook, population, riskLevel, frequency, baseSampleSize, subPopulation, subSampleSize);
+
+    // --- Build output ---
+    const responseText = buildResponseText(population, riskLevel, frequency, baseSampleSize, calculateSubSample, subPopulation, subSampleSize);
+    const calculationDetails = buildCalculationDetails(population, riskLevel, frequency, baseSampleSize, calculateSubSample, subPopulation, subSampleSize);
+
+    return {
+        success: true,
+        error: "",
+        baseSampleSize: baseSampleSize,
+        subSampleSize: subSampleSize,
+        responseText: responseText,
+        calculationDetails: calculationDetails
+    };
+}
+
+
+// ============================================================
+// VALIDATION
+// ============================================================
+
+/**
+ * Returns an empty string if all inputs are valid,
+ * or a descriptive error message if something is wrong.
+ */
+function validateInputs(
+    population: number,
+    riskLevel: string,
+    frequency: string,
+    calculateSubSample: boolean,
+    subPopulation: number
+): string {
+
+    if (!population || population < 1) {
+        return "Population must be a positive number greater than 0.";
+    }
+
+    const validRiskLevels = ["Low", "Medium", "High"];
+    if (validRiskLevels.indexOf(riskLevel) === -1) {
+        return "Risk level must be Low, Medium, or High. You provided: " + riskLevel;
+    }
+
+    const validFrequencies = [
+        "As Needed", "Multiple per day", "Daily", "Weekly",
+        "Bi-Weekly", "Monthly", "Quarterly", "Annually"
+    ];
+    if (validFrequencies.indexOf(frequency) === -1) {
+        return "Frequency must be one of: As Needed, Multiple per day, Daily, Weekly, Bi-Weekly, Monthly, Quarterly, Annually. You provided: " + frequency;
+    }
+
+    if (calculateSubSample && (!subPopulation || subPopulation < 1)) {
+        return "Sub-population must be a positive number when calculating sub-samples.";
+    }
+
+    return ""; // no error
+}
+
+
+// ============================================================
+// CORE CALCULATION
+// Returns -1 to signal an error (Office Scripts cannot return null)
+// ============================================================
+
+/**
+ * Calculates sample size. Returns -1 if inputs are invalid for
+ * the given combination (e.g. wrong population for the frequency).
+ */
+function calculateSampleSize(population: number, riskLevel: string, frequency: string): number {
+
+    const standardPopValues = [250, 52, 24, 12, 4, 1];
+
+    if (frequency === "As Needed") {
+        // Population must NOT be a standard frequency value
+        for (let i = 0; i < standardPopValues.length; i++) {
+            if (population === standardPopValues[i]) {
+                return -1; // caller will fetch the error message separately
+            }
+        }
+        if (population > 250) {
+            return getFixedSampleSize(riskLevel);
+        }
+        return interpolateSampleSize(population, riskLevel);
+
+    } else {
+        const expectedPop = getExpectedPop(frequency);
+
+        if (frequency === "Multiple per day") {
+            if (population <= 250) return -1;
+        } else {
+            if (population !== expectedPop) return -1;
+        }
+
+        return getSampleSizeFromTable(frequency, riskLevel);
+    }
+}
+
+/**
+ * Companion to calculateSampleSize — returns the human-readable
+ * error message for the same combination that would return -1.
+ */
+function getCalculationError(population: number, riskLevel: string, frequency: string): string {
+    const standardPopValues = [250, 52, 24, 12, 4, 1];
+
+    if (frequency === "As Needed") {
+        for (let i = 0; i < standardPopValues.length; i++) {
+            if (population === standardPopValues[i]) {
+                return "Population " + population + " matches a standard frequency value. Please specify the actual frequency (Daily, Weekly, Monthly, etc.) instead of As Needed.";
+            }
+        }
+    }
+
+    if (frequency === "Multiple per day" && population <= 250) {
+        return "Multiple per day frequency requires a population greater than 250. Your population is " + population + ".";
+    }
+
+    const expectedPop = getExpectedPop(frequency);
+    if (population !== expectedPop) {
+        return "For " + frequency + " frequency, the expected population is " + expectedPop + ", but you provided " + population + ". Please adjust the population or choose As Needed for custom populations.";
+    }
+
+    return "An unexpected calculation error occurred.";
+}
+
+/**
+ * Fixed sample sizes used when population > 250 with "As Needed"
+ */
+function getFixedSampleSize(riskLevel: string): number {
+    if (riskLevel === "Low") return 30;
+    if (riskLevel === "High") return 60;
+    return 45; // Medium (default)
+}
+
+/**
+ * Returns the canonical population expected for each standard frequency
+ */
+function getExpectedPop(frequency: string): number {
+    if (frequency === "Multiple per day") return 251;
+    if (frequency === "Daily") return 250;
+    if (frequency === "Weekly") return 52;
+    if (frequency === "Bi-Weekly") return 24;
+    if (frequency === "Monthly") return 12;
+    if (frequency === "Quarterly") return 4;
+    if (frequency === "Annually") return 1;
+    return 0;
+}
+
+/**
+ * Standard lookup table — returns sample size by frequency + risk
+ */
+function getSampleSizeFromTable(frequency: string, riskLevel: string): number {
+
+    if (frequency === "Multiple per day") {
+        if (riskLevel === "Low") return 30;
+        if (riskLevel === "High") return 60;
+        return 45;
+    }
+    if (frequency === "Daily") {
+        if (riskLevel === "Low") return 20;
+        if (riskLevel === "High") return 30;
+        return 25;
+    }
+    if (frequency === "Weekly") {
+        if (riskLevel === "Low") return 5;
+        if (riskLevel === "High") return 10;
+        return 8;
+    }
+    if (frequency === "Bi-Weekly") {
+        if (riskLevel === "Low") return 3;
+        if (riskLevel === "High") return 8;
+        return 6;
+    }
+    if (frequency === "Monthly") {
+        if (riskLevel === "Low") return 2;
+        if (riskLevel === "High") return 5;
+        return 3;
+    }
+    if (frequency === "Quarterly") {
+        return 2; // same for all risk levels
+    }
+    if (frequency === "Annually") {
+        return 1;
+    }
+    return 0;
+}
+
+/**
+ * Linear interpolation for non-standard populations (As Needed, pop <= 250).
+ * Table rows are [population, sampleSize] sorted highest to lowest population.
+ */
+function interpolateSampleSize(population: number, riskLevel: string): number {
+    let table: number[][];
+
+    if (riskLevel === "Low") {
+        table = [[250, 20], [52, 5], [24, 3], [12, 2], [4, 2], [1, 1]];
+    } else if (riskLevel === "High") {
+        table = [[250, 30], [52, 10], [24, 8], [12, 5], [4, 2], [1, 1]];
+    } else {
+        table = [[250, 25], [52, 8], [24, 6], [12, 3], [4, 2], [1, 1]]; // Medium
+    }
+
+    // Exact match
+    for (let i = 0; i < table.length; i++) {
+        if (population === table[i][0]) return table[i][1];
+    }
+
+    // Between two known points — linear interpolation
+    for (let i = 0; i < table.length - 1; i++) {
+        const x1 = table[i][0];
+        const y1 = table[i][1];
+        const x2 = table[i + 1][0];
+        const y2 = table[i + 1][1];
+
+        if (population < x1 && population > x2) {
+            const interpolated = y1 + ((population - x1) * (y2 - y1)) / (x2 - x1);
+            return Math.ceil(interpolated);
+        }
+    }
+
+    // Outside range — clamp to nearest endpoint
+    if (population > table[0][0]) return table[0][1];
+    if (population < table[table.length - 1][0]) return table[table.length - 1][1];
+
+    return table[0][1]; // fallback
+}
+
+
+// ============================================================
+// OUTPUT BUILDERS
+// ============================================================
+
+/**
+ * Builds the chat-friendly text returned to the Copilot agent
+ */
+function buildResponseText(
+    population: number,
+    riskLevel: string,
+    frequency: string,
+    baseSampleSize: number,
+    includeSubSample: boolean,
+    subPopulation: number,
+    subSampleSize: number
+): string {
+
+    let text = "AUDIT SAMPLING CALCULATION COMPLETE\n\n";
+
+    text += "Base Sample Analysis:\n";
+    text += "  Population:          " + population + "\n";
+    text += "  Risk Level:          " + riskLevel + "\n";
+    text += "  Frequency:           " + frequency + "\n";
+    text += "  Required Sample Size: " + baseSampleSize + "\n";
+
+    if (includeSubSample && subSampleSize > 0) {
+        text += "\nSub-Sample Analysis:\n";
+        text += "  Sub-Population:          " + subPopulation + "\n";
+        text += "  Risk Level:              " + riskLevel + " (inherited from base)\n";
+        text += "  Required Sub-Sample Size: " + subSampleSize + "\n";
+    }
+
+    text += "\nRecommendation:\n";
+    text += "Select " + baseSampleSize + " samples from a population of " + population;
+
+    if (includeSubSample && subSampleSize > 0) {
+        text += ", then select " + subSampleSize + " sub-samples from the " + subPopulation + " items within your base sample";
+    }
+
+    text += " for " + riskLevel.toLowerCase() + " risk audit testing.";
+
+    return text;
+}
+
+/**
+ * Builds the detailed methodology explanation
+ */
+function buildCalculationDetails(
+    population: number,
+    riskLevel: string,
+    frequency: string,
+    baseSampleSize: number,
+    includeSubSample: boolean,
+    subPopulation: number,
+    subSampleSize: number
+): string {
+
+    let details = "CALCULATION METHODOLOGY\n\n";
+
+    details += "Base Sample:\n";
+
+    if (frequency === "As Needed") {
+        if (population > 250) {
+            details += "  Method: Fixed sample size for populations over 250\n";
+        } else {
+            details += "  Method: Linear interpolation between standard population values\n";
+        }
+    } else {
+        details += "  Method: Standard table lookup for " + frequency + " frequency\n";
+    }
+
+    if (riskLevel === "Low") details += "  Risk:   Low — conservative sampling applied\n";
+    if (riskLevel === "Medium") details += "  Risk:   Medium — moderate sampling applied\n";
+    if (riskLevel === "High") details += "  Risk:   High — extensive sampling applied\n";
+
+    details += "  Result: " + baseSampleSize + " samples from " + population + " total population\n";
+
+    if (includeSubSample && subSampleSize > 0) {
+        details += "\nSub-Sample:\n";
+        details += "  Method: Linear interpolation (As Needed)\n";
+        details += "  Risk:   " + riskLevel + " (inherited from base)\n";
+        details += "  Result: " + subSampleSize + " sub-samples from " + subPopulation + " items\n";
+    }
+
+    return details;
+}
+
+/**
+ * Helper — builds the error return object (avoids repetition in main)
+ */
+function buildErrorResult(errorMessage: string): {
+    success: boolean;
+    error: string;
+    baseSampleSize: number;
+    subSampleSize: number;
+    responseText: string;
+    calculationDetails: string;
+} {
+    return {
+        success: false,
+        error: errorMessage,
+        baseSampleSize: 0,
+        subSampleSize: 0,
+        responseText: "ERROR: " + errorMessage,
+        calculationDetails: ""
+    };
+}
+
+
+// ============================================================
+// AUDIT TRAIL — writes every calculation to "Calculation Log"
+// ============================================================
+
+function logToSheet(
+    workbook: ExcelScript.Workbook,
+    population: number,
+    riskLevel: string,
+    frequency: string,
+    baseSampleSize: number,
+    subPopulation: number,
+    subSampleSize: number
+): void {
+
+    // Get or create the log sheet
+    let logSheet = workbook.getWorksheet("Calculation Log");
+
+    if (!logSheet) {
+        logSheet = workbook.addWorksheet("Calculation Log");
+
+        // Header row
+        const headers = [["Timestamp", "Population", "Risk Level", "Frequency", "Base Sample Size", "Sub-Population", "Sub-Sample Size"]];
+        logSheet.getRange("A1:G1").setValues(headers);
+        logSheet.getRange("A1:G1").getFormat().getFont().setBold(true);
+        logSheet.getRange("A1:G1").getFormat().getFill().setColor("#4472C4");
+        logSheet.getRange("A1:G1").getFormat().getFont().setColor("#FFFFFF");
+
+        // Column widths
+        logSheet.getRange("A:A").getFormat().setColumnWidth(160);
+        logSheet.getRange("B:B").getFormat().setColumnWidth(90);
+        logSheet.getRange("C:C").getFormat().setColumnWidth(90);
+        logSheet.getRange("D:D").getFormat().setColumnWidth(120);
+        logSheet.getRange("E:E").getFormat().setColumnWidth(120);
+        logSheet.getRange("F:F").getFormat().setColumnWidth(110);
+        logSheet.getRange("G:G").getFormat().setColumnWidth(110);
+    }
+
+    // Find next empty row
+    const usedRange = logSheet.getUsedRange();
+    const nextRow = usedRange ? usedRange.getRowCount() + 1 : 2;
+
+    // Build row data — use empty string for unused sub-sample columns
+    const subPopDisplay = subPopulation > 0 ? subPopulation : "";
+    const subSampleDisplay = subSampleSize > 0 ? subSampleSize : "";
+
+    const now = new Date();
+    const timestamp = now.getFullYear() + "-" +
+        pad(now.getMonth() + 1) + "-" +
+        pad(now.getDate()) + " " +
+        pad(now.getHours()) + ":" +
+        pad(now.getMinutes()) + ":" +
+        pad(now.getSeconds());
+
+    const rowData: (string | number)[][] = [[
+        timestamp,
+        population,
+        riskLevel,
+        frequency,
+        baseSampleSize,
+        subPopDisplay,
+        subSampleDisplay
+    ]];
+
+    logSheet.getRange("A" + nextRow + ":G" + nextRow).setValues(rowData);
+
+    // Alternate row shading for readability
+    if (nextRow % 2 === 0) {
+        logSheet.getRange("A" + nextRow + ":G" + nextRow).getFormat().getFill().setColor("#F2F7FF");
+    }
+}
+
+/** Zero-pads a number to two digits (used for timestamp formatting) */
+function pad(n: number): string {
+    return n < 10 ? "0" + n : "" + n;
+}
