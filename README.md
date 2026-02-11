@@ -23,6 +23,7 @@ This repository contains audit sample size calculator implementations in multipl
 
 ## 📖 Documentation
 
+- **[Quick Start Guide](./QUICKSTART.md)** - Get started in 15 minutes
 - **[Power Automate + Monday.com Integration Guide](./POWER_AUTOMATE_MONDAY_INTEGRATION.md)** - Complete guide on connecting Power Automate with Monday.com to automate sample size calculations
 
 ## 💡 Use Cases
