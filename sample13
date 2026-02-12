@@ -1,0 +1,57 @@
+function main(
+  workbook: ExcelScript.Workbook,
+  mondayDataJson: string
+) {
+  const items: {
+    id: string;
+    name: string;
+    column_values: { id: string; text: string }[];
+  }[] = JSON.parse(mondayDataJson);
+
+  const sheet = workbook.getWorksheet("MondayData");
+
+  // Clear old data below headers
+  const usedRange = sheet.getUsedRange();
+  if (usedRange && usedRange.getRowCount() > 1) {
+    sheet.getRangeByIndexes(
+      1, 0,
+      usedRange.getRowCount() - 1,
+      usedRange.getColumnCount()
+    ).clear(ExcelScript.ClearApplyTo.contents);
+  }
+
+  // Write data
+  items.forEach((item, i) => {
+    const row = i + 2;
+    sheet.getRange(`A${row}`).setValue(item.id);
+    sheet.getRange(`B${row}`).setValue(item.name);
+    item.column_values.forEach((col, j) => {
+      sheet.getRangeByIndexes(row - 1, j + 2, 1, 1).setValue(col.text ?? "");
+    });
+  });
+
+  return `Done: ${items.length} items imported`;
+}
+```
+
+Save it as **"ImportMondayData"**.
+
+Make sure your workbook has a sheet named **"MondayData"** with headers like:
+
+| A | B | C | D |
+|---|---|---|---|
+| Item ID | Item Name | Status | Numbers |
+
+## Step 5 — Add "Run Script" Action in Power Automate
+
+Click **+ New step → Excel Online (Business) → Run script**
+
+| Field | Value |
+|-------|-------|
+| Location | Your SharePoint/OneDrive |
+| Library | Documents |
+| File | Your workbook |
+| Script | ImportMondayData |
+| mondayDataJson | use this expression: |
+```
+string(body('Parse_JSON')?['data']?['boards']?[0]?['items_page']?['items'])
