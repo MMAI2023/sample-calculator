@@ -1,0 +1,17 @@
+{
+  "errors": [
+    {
+      "message": "Syntax Error: Unexpected Name \"graphql\".",
+      "locations": [
+        {
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "extensions": {
+        "code": "PARSING_ERROR"
+      }
+    }
+  ],
+  "extensions": {
+    "request_id": 
