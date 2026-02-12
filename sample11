@@ -1,0 +1,1 @@
+{"query": "{ boards(ids: YOUR_BOARD_ID) { items_page(limit: 2) { items { id name column_values(ids: [\"status\", \"numbers_1\"]) { id text } } } } }"}
