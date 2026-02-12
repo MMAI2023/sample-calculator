@@ -1,0 +1,19 @@
+graphql{
+  boards(ids: YOUR_BOARD_ID) {
+    columns {
+      id
+      title
+      type
+    }
+    items_page(limit: 5) {
+      items {
+        id
+        name
+        column_values {
+          id
+          text
+        }
+      }
+    }
+  }
+}
